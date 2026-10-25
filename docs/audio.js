@@ -45,7 +45,8 @@ export function createAudio({ context = null } = {}) {
   let pulseDiv = 0;
   let nextBarTime = 0;
   // open: 0..1, how far threat opens the bass filter and brightens the pad.
-  const params = { energy: 0.5, density: 0.5, open: 0, layers: { pad: true, bass: true, arp: true, lead: true } };
+  const params = { energy: 0.5, density: 0.5, open: 0, biome: 0.5, space: 0,
+    layers: { pad: true, bass: true, arp: true, lead: true } };
   // The lead renders a whole phrase per section; its energy and density are latched at each
   // section start so a mid-section change cannot switch phrase realizations halfway.
   const leadParams = { energy: 0.5, density: 0.5 };
@@ -118,9 +119,27 @@ export function createAudio({ context = null } = {}) {
   // Music voices (from astrocatch). `vel` is the note velocity 1..127.
   // ---------------------------------------------------------------------------------------------
 
+  // The ground under the player as voice weights, from params.biome and params.space, read per
+  // note so a border is heard within a bar. Same breakpoints as the GL biome ramp. `space` is
+  // the digital domain and wins over the biome weights, as it does on screen.
+  const TERRAIN = { space: 0, water: 0, trees: 0, snow: 0 };
+  function terrain() {
+    const b = params.biome;
+    const step = (lo, hi) => Math.max(0, Math.min(1, (b - lo) / (hi - lo)));
+    const natural = 1 - params.space;
+    TERRAIN.space = params.space;
+    TERRAIN.water = (1 - step(0.15, 0.3)) * natural;
+    TERRAIN.trees = step(0.62, 0.8) * (1 - step(0.85, 0.95)) * natural;
+    TERRAIN.snow = step(0.85, 0.95) * natural;
+    return TERRAIN;
+  }
+
+  // Pad: two detuned sines. Water widens the detune and slows the attack (a chorused swell);
+  // space adds a quiet square an octave down (a digital hum); snow adds the octave-up shimmer.
   function padVoice(freq, t, dur, vel) {
+    const tr = terrain();
     const g = ctx.createGain();
-    const attack = Math.min(0.35, dur * 0.3);
+    const attack = Math.min(0.35 + 0.4 * tr.water, dur * (0.3 + 0.3 * tr.water));
     const release = Math.min(0.45, dur * 0.4);
     const peak = 0.16 * (vel / 100);
     g.gain.value = 0;
@@ -131,7 +150,8 @@ export function createAudio({ context = null } = {}) {
     g.gain.setValueAtTime(0, t + dur + 0.002);
     g.connect(songBus);
     let left = 2;
-    for (const detune of [-7, 7]) {
+    const spread = 7 + 9 * tr.water;
+    for (const detune of [-spread, spread]) {
       const osc = ctx.createOscillator();
       osc.type = "sine";
       osc.detune.value = detune;
@@ -141,13 +161,27 @@ export function createAudio({ context = null } = {}) {
       osc.stop(t + dur + 0.03);
       osc.onended = () => { osc.disconnect(); if (--left === 0) g.disconnect(); };
     }
-    // Threat brightens the pad: a quiet triangle an octave up, as loud as `open` asks.
-    if (params.open > 0.05) {
+    if (tr.space > 0.05) {
+      const sq = ctx.createOscillator();
+      sq.type = "square";
+      sq.frequency.setValueAtTime(freq * 0.5, t);
+      const sg = ctx.createGain();
+      sg.gain.value = 0.12 * tr.space;
+      sq.connect(sg).connect(g);
+      left++;
+      sq.start(t);
+      sq.stop(t + dur + 0.03);
+      sq.onended = () => { sq.disconnect(); sg.disconnect(); if (--left === 0) g.disconnect(); };
+    }
+    // Threat brightens the pad: a quiet triangle an octave up, as loud as `open` asks. Snow
+    // keeps a little of it on all the time.
+    const shimmer = Math.max(params.open, 0.4 * tr.snow);
+    if (shimmer > 0.05) {
       const hi = ctx.createOscillator();
       hi.type = "triangle";
       hi.frequency.setValueAtTime(freq * 2, t);
       const hg = ctx.createGain();
-      hg.gain.value = 0.35 * params.open;
+      hg.gain.value = 0.35 * shimmer;
       hi.connect(hg).connect(g);
       left++;
       hi.start(t);
@@ -171,10 +205,13 @@ export function createAudio({ context = null } = {}) {
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
     filter.Q.value = 0.8;
-    // Threat opens the filter envelope: a brighter attack and a higher tail.
+    // Threat opens the filter envelope: a brighter attack and a higher tail. Space opens it
+    // further, trees close it (a duller, woodier bass).
+    const tr = terrain();
+    const tilt = (1 + 0.8 * tr.space) * (1 - 0.35 * tr.trees);
     filter.frequency.setValueAtTime(180, t);
-    filter.frequency.exponentialRampToValueAtTime(1100 + 1500 * params.open, t + 0.015);
-    filter.frequency.exponentialRampToValueAtTime(260 + 400 * params.open, t + len);
+    filter.frequency.exponentialRampToValueAtTime((1100 + 1500 * params.open) * tilt, t + 0.015);
+    filter.frequency.exponentialRampToValueAtTime((260 + 400 * params.open) * tilt, t + len);
     const g = ctx.createGain();
     envelope(g, t, 0.45 * (vel / 110), 0.018, t + len);
     osc.connect(filter);
@@ -187,27 +224,50 @@ export function createAudio({ context = null } = {}) {
     osc.onended = () => { osc.disconnect(); sub.disconnect(); subGain.disconnect(); filter.disconnect(); g.disconnect(); };
   }
 
+  // Arp: a triangle, and in space a square blended in by the space weight, through a lowpass
+  // that space and snow open and water and trees close.
   function arpVoice(freq, t, dur, vel) {
+    const tr = terrain();
     const len = Math.max(0.08, Math.min(dur, 0.3));
-    const osc = ctx.createOscillator();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(freq, t);
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.value = 1700;
+    filter.frequency.value = 1700 * (1 + 1.2 * tr.space + 0.5 * tr.snow) *
+      (1 - 0.4 * tr.water - 0.3 * tr.trees);
     filter.Q.value = 1;
     const g = ctx.createGain();
     envelope(g, t, 0.15 * (vel / 100), 0.018, t + len);
-    osc.connect(filter).connect(g).connect(songBus);
-    osc.start(t);
-    osc.stop(t + len + 0.03);
-    osc.onended = () => { osc.disconnect(); filter.disconnect(); g.disconnect(); };
+    filter.connect(g).connect(songBus);
+    const parts = [];
+    const add = (type, gain) => {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+      const og = ctx.createGain();
+      og.gain.value = gain;
+      osc.connect(og).connect(filter);
+      osc.start(t);
+      osc.stop(t + len + 0.03);
+      parts.push(osc, og);
+    };
+    add("triangle", 1 - 0.6 * tr.space);
+    if (tr.space > 0.05) add("square", 0.45 * tr.space);
+    let left = parts.length / 2;
+    for (let i = 0; i < parts.length; i += 2) {
+      parts[i].onended = () => {
+        parts[i].disconnect();
+        parts[i + 1].disconnect();
+        if (--left === 0) { filter.disconnect(); g.disconnect(); }
+      };
+    }
   }
 
+  // Lead: two detuned sines. Water softens it and lets it ring longer; space adds a quiet
+  // sawtooth at the same pitch so the melody gets an edge in the digital domain.
   function leadVoice(freq, t, dur, vel) {
-    const len = Math.max(0.3, Math.min(dur + 0.25, 1.6));
+    const tr = terrain();
+    const len = Math.max(0.3, Math.min(dur + 0.25 + 0.3 * tr.water, 1.9));
     const g = ctx.createGain();
-    envelope(g, t, 0.2 * (vel / 110), 0.04, t + len);
+    envelope(g, t, 0.2 * (vel / 110) * (1 - 0.25 * tr.water), 0.04 + 0.04 * tr.water, t + len);
     g.connect(songBus);
     let left = 2;
     for (const detune of [-6, 6]) {
@@ -219,6 +279,18 @@ export function createAudio({ context = null } = {}) {
       osc.start(t);
       osc.stop(t + len + 0.03);
       osc.onended = () => { osc.disconnect(); if (--left === 0) g.disconnect(); };
+    }
+    if (tr.space > 0.05) {
+      const saw = ctx.createOscillator();
+      saw.type = "sawtooth";
+      saw.frequency.setValueAtTime(freq, t);
+      const sg = ctx.createGain();
+      sg.gain.value = 0.18 * tr.space;
+      saw.connect(sg).connect(g);
+      left++;
+      saw.start(t);
+      saw.stop(t + len + 0.03);
+      saw.onended = () => { saw.disconnect(); sg.disconnect(); if (--left === 0) g.disconnect(); };
     }
   }
 
@@ -490,10 +562,12 @@ export function createAudio({ context = null } = {}) {
       if (wanted && piece) run();
     },
     // Updates in place (main.js calls this every frame). Missing fields keep their value.
-    setMusicParams({ energy, density, open, layers } = {}) {
+    setMusicParams({ energy, density, open, biome, space, layers } = {}) {
       if (energy !== undefined) params.energy = energy;
       if (density !== undefined) params.density = density;
       if (open !== undefined) params.open = Math.max(0, Math.min(1, open));
+      if (biome !== undefined) params.biome = Math.max(0, Math.min(1, biome));
+      if (space !== undefined) params.space = Math.max(0, Math.min(1, space));
       if (layers) for (const k in layers) params.layers[k] = !!layers[k];
     },
     musicParams: () => params,

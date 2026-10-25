@@ -44,7 +44,15 @@ the audio can be removed or swapped without touching `world.js`. `threat(world)`
 - Events: `score`, `dashStart`, `dashEnd`, `goalMoved`, `split`, `join`, `death`, each with
   world `x, y` and a screen `pan` (`panOf`).
 - `heat` is the threat with a fast attack and a slow release (`HEAT_RELEASE`). `musicParams`
-  maps heat above `HEAT_CALM`, score and enemy count to `{ energy, density, open, layers }`.
+  maps heat above `HEAT_CALM`, score and enemy count to `{ energy, density, open, layers }`, and
+  passes the ground under the player through as `biome` (0 water .. 1 snow) and `space` (1 in
+  the digital domain), from `world.playerBiome` and `world.playerSpace`. Space raises density a
+  little and water lowers it. The engine's `terrain()` turns the pair into water, trees, snow
+  and space weights per note (same breakpoints as the GL biome ramp; space wins) and the voices
+  read them: water widens the pad's detune and slows its attack and softens the lead, space adds
+  a square under the pad and the arp and a saw to the lead and opens the bass and arp filters,
+  trees close those filters, snow keeps a little octave shimmer on the pad. Nothing changes the
+  piece itself, so the tune continues across a border and the sound shifts within a bar.
   Layer rules: pad and bass always; arp after the first point or at `ARP_HEAT`; lead after the
   first point.
 - `scripts/events-test.js` drives scripted worlds through the tracker.

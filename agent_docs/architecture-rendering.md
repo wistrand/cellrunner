@@ -64,7 +64,19 @@ diagram changes every frame anyway, so there is nothing to cache.
   cells still reads as danger; the rim colour follows the same order. Before all of that the
   base fill and rim are each a `mix` of the tone-0 and tone-1 colours (`cell`/`cellB`,
   `rim`/`rimB`) by the cell's `world.tone`, and the tone also shifts the glow's band mix: open
-  ground is mostly the wide soft band, dense ground mostly the tight line.
+  ground is mostly the wide soft band, dense ground mostly the tight line. GL only: the ground
+  colour first comes from a biome ramp on the cell's `world.biome` (`water`, `grass` through the
+  middle, `trees`, `snow`, blended with smoothsteps so areas shade into each other); the tone
+  darkens it toward `cellB`, and the rim takes 40% of the brightened biome colour so water glows
+  blue and grass green. The cell's `world.space` weight then overrides all of that: at 1 the
+  cell is exactly the pre-biome look, `cell` to `cellB` by tone, the untinted rim, full glow,
+  flat. Space is its own very broad field with a sharp edge, so the switch into the digital
+  domain happens across a band a few cells wide. Grass, tree and snow cells outside space are
+  also shaded as cushions: each vertex carries the
+  cell centre (`a_center`), and with `v_edge` the fragment knows how far up the dome it is along
+  its ray from the centre, so the crown is bright, slopes facing the upper left are lit, the far
+  slope and rim are dark, and the glow band is damped there. Neighbouring domes meet in a dark
+  seam. Water and space stay flat. The 2D renderer ignores the biome by choice.
 - **Edges** are thin quads in the flat program (`gl.LINES` cannot be widened). Each edge's alpha
   and width rise with the mean tone of its cells (`edgeTone`). An edge with `dead` set (closed
   to enemies, see the world doc) is drawn instead in `edgeDead`, a pale tint at a fixed width,
@@ -113,7 +125,8 @@ falloff as the GL shader. Kept intentionally simple; it exists so the game runs 
 
 Each renderer has its own `COLORS` table (CSS strings in 2D, float arrays in GL) with the same
 roles: background, cell at tone 0 and tone 1, hot cell, edge, dead edge, route, goal, hunter,
-wanderer, player, boost, shadow, vignette, and GL-only rim and glow variants. Keep the two tables in step when
+wanderer, player, boost, shadow, vignette, and GL-only rim and glow variants plus the biome ramp
+(water, grass, trees, snow). Keep the two tables in step when
 changing a role. Tone colours stay away from red (danger) and gold (goal).
 
 ## DPR and resize

@@ -75,6 +75,16 @@ export const TUNING = {
   // lower the width together.
   riverScale: 100,     // grid cells per noise unit; larger means fewer, longer, lazier rivers
   riverWidth: 0.015,   // noise units either side of the contour; about 1.5 grid cells wide
+  // Biome: a fourth broad sample of the same simplex, 0..1, purely visual. The GL renderer maps
+  // it through a colour ramp, water at 0, grass in the middle, trees, snow at 1, blending
+  // between neighbours so areas shade into each other. River cells are forced to 0 (`biomeAt`).
+  biomeScale: 60,      // grid cells per noise unit
+  biomeContrast: 0.9,  // noise amplitude to biome; the extremes (water, snow) stay uncommon
+  // Space: a fifth, far broader sample is the digital domain, the plain pre-biome look. Its
+  // weight (`spaceAt`) is 0 outside, 1 inside, with a transition band a handful of cells wide,
+  // so a run crosses a visible border rather than a gradual shift. Space wins over the biome.
+  spaceScale: 120,     // grid cells per noise unit; regions span viewports
+  spaceEdge: [0.15, 0.3], // noise values where the weight goes 0 to 1; the band's width
   // Tone: a second, much broader simplex field (0 open, 1 dense) that gives large areas a
   // character of their own. It shifts the density (bigger cells where it is low) and tints the
   // renderers' fill, rim and edge styles. Continuous, so areas blend into each other.
@@ -157,6 +167,26 @@ function riverAt(world, c, r) {
   const s = TUNING.riverScale;
   const n = world.noise((c + 0.5) / s - 61.75, (r + 0.5) / s + 23.5);
   return Math.abs(n) < TUNING.riverWidth;
+}
+
+// The biome at a world position, 0..1 (water .. snow), for the renderers only. The same simplex
+// at biomeScale with its own offset; a position inside a river band is water.
+function biomeAt(world, x, y) {
+  const cell = world.cell;
+  if (riverAt(world, Math.floor(x / cell), Math.floor(y / cell))) return 0;
+  const s = TUNING.biomeScale * cell;
+  const n = world.noise(x / s + 17.25, y / s + 88.5);
+  return Math.min(1, Math.max(0, 0.5 + TUNING.biomeContrast * n));
+}
+
+// The space weight at a world position, 0..1: 1 inside the digital domain. A smoothstep of a
+// very broad sample between the spaceEdge values, so the border is a band a few cells wide.
+function spaceAt(world, x, y) {
+  const s = TUNING.spaceScale * world.cell;
+  const n = world.noise(x / s - 203.5, y / s + 151.25);
+  const [lo, hi] = TUNING.spaceEdge;
+  const t = Math.min(1, Math.max(0, (n - lo) / (hi - lo)));
+  return t * t * (3 - 2 * t);
 }
 
 // The tone at a world position, 0..1. The same simplex as the density, sampled far broader and
@@ -284,6 +314,10 @@ export function createWorld(seed, width, height) {
     goalHeat: null,
     playerHeat: null,
     tone: null,          // per cell, 0..1: the broad tone field at the site's home
+    biome: null,         // per cell, 0..1: water .. snow at the site's home; GL renderer only
+    space: null,         // per cell, 0..1: weight of the digital domain; GL renderer only
+    playerBiome: 0.5,    // the biome field at the player's position, for the audio
+    playerSpace: 0,      // the space weight at the player's position, for the audio
     camera: { x: 0, y: 0, scale: 1 },
     camGoal: null,       // the fit a running move eases toward; null while holding
     score: 0,
@@ -438,7 +472,8 @@ function inBounds(b, x, y) {
 
 function addSite(world, s) {
   world.sites.push(s);
-  world.homes.push({ x: s.x, y: s.y, tone: toneAt(world, s.x, s.y) });
+  world.homes.push({ x: s.x, y: s.y, tone: toneAt(world, s.x, s.y), biome: biomeAt(world, s.x, s.y),
+    space: spaceAt(world, s.x, s.y) });
   world.vel.push({ x: 0, y: 0 });
 }
 
@@ -1392,6 +1427,8 @@ function finishStep(world) {
   const goalHeat = field(world.goalHeat);
   const playerHeat = field(world.playerHeat);
   const tone = field(world.tone);
+  const biome = field(world.biome);
+  const space = field(world.space);
   const R = TUNING.heatRadius * world.cell;
   const G = TUNING.goalRadius * world.cell;
   const P = TUNING.playerRadius * world.cell;
@@ -1408,11 +1445,18 @@ function finishStep(world) {
     goalHeat[i] = Math.min(1, fall(dist2(s.x, s.y, world.goalX, world.goalY), G));
     playerHeat[i] = Math.min(1, fall(dist2(s.x, s.y, world.player.x, world.player.y), P));
     tone[i] = world.homes[i].tone;
+    biome[i] = world.homes[i].biome;
+    space[i] = world.homes[i].space;
   }
   world.heat = heat;
   world.goalHeat = goalHeat;
   world.playerHeat = playerHeat;
   world.tone = tone;
+  world.biome = biome;
+  world.space = space;
+  // The ground under the player, continuous, for the music's timbre.
+  world.playerBiome = biomeAt(world, world.player.x, world.player.y);
+  world.playerSpace = spaceAt(world, world.player.x, world.player.y);
   // Drop expired edit markers.
   const flashes = world.flashes;
   let keep = 0;

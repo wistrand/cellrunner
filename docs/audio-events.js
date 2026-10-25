@@ -28,6 +28,8 @@ export function createEventTracker() {
     threat: 0,
     heat: 0,
     enemyCount: 0,
+    biome: 0.5, // world.playerBiome: the ground under the player, 0 water .. 1 snow
+    space: 0,   // world.playerSpace: 1 inside the digital domain
     events: [],
     pool: [],
   };
@@ -84,6 +86,8 @@ export function diffWorld(tr, world) {
   let count = 0;
   for (const en of world.enemies) if (isLethal(en)) count++;
   tr.enemyCount = count;
+  tr.biome = world.playerBiome;
+  tr.space = world.playerSpace;
   return tr.events;
 }
 
@@ -91,13 +95,20 @@ export function diffWorld(tr, world) {
 // allocation). Pad and bass always play; the arp joins with heat or after the first point; the
 // lead (the hook) enters after the first goal. Heat raises energy and density and opens the
 // filters; goals reached and the enemy count add a little on top.
-export function musicParams(tr, out = { energy: 0, density: 0, open: 0, layers: {} }) {
+export function musicParams(tr, out = { energy: 0, density: 0, open: 0, biome: 0.5, space: 0,
+  layers: {} }) {
   const h = Math.max(0, (tr.heat - HEAT_CALM) / (1 - HEAT_CALM));
   const progress = Math.min(1, tr.goals / 10);
   const crowd = Math.min(1, tr.enemyCount / 12);
+  // The ground colours the arrangement a little: the digital domain is busier, water sparser.
+  const water = Math.max(0, 1 - tr.biome / 0.3);
   out.energy = Math.min(1, 0.35 + 0.45 * h + 0.2 * progress);
-  out.density = Math.min(1, 0.3 + 0.5 * h + 0.2 * crowd);
+  out.density = Math.min(1, Math.max(0, 0.3 + 0.5 * h + 0.2 * crowd + 0.15 * tr.space -
+    0.15 * water));
   out.open = h;
+  // Timbre: the engine reads these per note (see audio.js `terrain`).
+  out.biome = tr.biome;
+  out.space = tr.space;
   const layers = out.layers;
   layers.pad = true;
   layers.bass = true;

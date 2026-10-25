@@ -13,6 +13,12 @@ const COLORS = {
   cell: [0.07, 0.085, 0.16],     // fill at tone 0 (open ground): cold indigo
   cellB: [0.05, 0.12, 0.105],    // fill at tone 1 (dense ground): sea green
   hot: [0.55, 0.12, 0.20],
+  // Biome ramp (world.biome, 0..1): water, grass, space (the plain `cell` ground with the
+  // original rim glow and no tint), trees, snow.
+  water: [0.06, 0.17, 0.32],
+  grass: [0.12, 0.21, 0.12],
+  trees: [0.05, 0.13, 0.09],
+  snow: [0.40, 0.46, 0.56],
   rim: [0.36, 0.52, 0.95],       // cell edge glow at tone 0, scaled by u_glow
   rimB: [0.3, 0.88, 0.62],       // cell edge glow at tone 1
   hotRim: [1.0, 0.42, 0.42],
@@ -70,12 +76,18 @@ in float a_heat;
 in float a_goal;
 in float a_player;
 in float a_tone;
+in float a_biome;
+in float a_space;
+in vec2 a_center;
 out vec2 v_pos;
+out vec2 v_center;
+out float v_space;
 out float v_edge;
 out float v_heat;
 out float v_goal;
 out float v_player;
 out float v_tone;
+out float v_biome;
 void main() {
   v_pos = a_pos;
   v_edge = a_edge;
@@ -83,6 +95,9 @@ void main() {
   v_goal = a_goal;
   v_player = a_player;
   v_tone = a_tone;
+  v_biome = a_biome;
+  v_center = a_center;
+  v_space = a_space;
   gl_Position = project(a_pos);
 }
 `;
@@ -90,6 +105,10 @@ const CELL_FS = `#version 300 es
 precision mediump float;
 uniform vec3 u_cell;
 uniform vec3 u_cellB;
+uniform vec3 u_water;     // biome ramp: water, grass, u_cell as space, trees, snow
+uniform vec3 u_grass;
+uniform vec3 u_trees;
+uniform vec3 u_snow;
 uniform vec3 u_hot;
 uniform vec3 u_rim;
 uniform vec3 u_rimB;
@@ -110,13 +129,44 @@ in float v_heat;
 in float v_goal;
 in float v_player;
 in float v_tone;
+in float v_biome;
+in vec2 v_center;
+in float v_space;
 out vec4 o;
 void main() {
   float heat = clamp(v_heat, 0.0, 1.0);
   float goal = clamp(v_goal, 0.0, 1.0);
   float ply = clamp(v_player, 0.0, 1.0);
   float tone = clamp(v_tone, 0.0, 1.0);
-  vec3 ground = mix(u_cell, u_cellB, tone);
+  // Biome ramp: water below 0.15, grass through the middle, trees around 0.8, snow above 0.95,
+  // with smooth blends between, so neighbouring areas shade into each other; dense tone darkens
+  // the ground toward the tone-1 colour. Space is a separate weight (world.space, its own very
+  // broad field with a sharp edge): inside it the cell is the original look, the tone-0 to
+  // tone-1 ground, untinted rim, full glow, flat, whatever the biome says.
+  float b = clamp(v_biome, 0.0, 1.0);
+  float toGrass = smoothstep(0.15, 0.3, b);
+  float toTrees = smoothstep(0.62, 0.8, b);
+  float toSnow = smoothstep(0.85, 0.95, b);
+  float wSpace = clamp(v_space, 0.0, 1.0);
+  float wGrass = toGrass * (1.0 - toTrees);
+  float wTrees = toTrees * (1.0 - toSnow);
+  vec3 bio = mix(u_water, u_grass, toGrass);
+  bio = mix(bio, u_trees, toTrees);
+  bio = mix(bio, u_snow, toSnow);
+  vec3 ground = mix(mix(bio, mix(bio, u_cellB, 0.4), tone), mix(u_cell, u_cellB, tone), wSpace);
+  // Cushion: grass and tree cells are shaded as soft domes, bright at the crown, lit on the
+  // slopes that face the upper left and darker on the far slope and at the rim, so those areas
+  // read as padded rather than flat; neighbouring domes meet in a dark seam like quilting.
+  // Water and plain ground stay flat. 't' is 1 at the crown and 0 at the rim along any ray
+  // from the centre, since v_edge falls to zero as the distance from the centre grows.
+  float cushion = max(max(0.7 * wGrass, wTrees), 0.5 * toSnow) * (1.0 - wSpace);
+  vec2 d = v_pos - v_center;
+  float dl = length(d);
+  float t = v_edge / max(1e-3, v_edge + dl);
+  float h = 1.0 - (1.0 - t) * (1.0 - t);
+  float lit = dl > 0.0 ? dot(d / dl, vec2(-0.6, -0.8)) : 0.0;
+  float shade = 0.55 + 0.45 * h + 0.25 * (1.0 - h) * lit;
+  ground *= mix(1.0, shade, cushion);
   vec3 base = mix(mix(mix(ground, u_goalCell, goal), u_playerCell, ply), u_hot, heat);
   // Two-band rim: a wide soft falloff plus a tight line at the edge itself. Open ground (tone 0)
   // is mostly the soft band; dense ground (tone 1) is mostly the crisp line.
@@ -124,14 +174,16 @@ void main() {
   float tight = 1.0 - smoothstep(0.0, 1.5 / u_zoom, v_edge);
   float wideK = mix(0.30, 0.10, tone);
   float tightK = mix(0.06, 0.20, tone);
-  vec3 rim0 = mix(u_rim, u_rimB, tone);
+  // The rim takes a little of the biome colour, brightened, so water glows blue and grass green;
+  // not in space, which keeps the original rim.
+  vec3 rim0 = mix(mix(u_rim, u_rimB, tone), bio * 3.0, 0.4 * (1.0 - wSpace));
   vec3 rim = mix(mix(mix(rim0, u_goalRim, goal), u_playerRim, ply), u_hotRim, heat);
   // Pulse: cells with enemies on them breathe; cells around the player breathe harder and
   // faster as an enemy closes in.
   float near = 1.0 - smoothstep(0.0, u_near, distance(v_pos, u_player));
   float amp = 0.6 * heat + 0.8 * u_threat * near + 0.3 * goal;
   float pulse = 1.0 + amp * (0.5 + 0.5 * sin(u_time * (5.0 + 9.0 * u_threat)));
-  float band = wideK * wide * wide + tightK * tight;
+  float band = (wideK * wide * wide + tightK * tight) * (1.0 - 0.6 * cushion);
   vec3 c = base + rim * u_glow * pulse * band * (1.0 + 1.5 * heat);
   o = vec4(c, 1.0);
 }
@@ -294,7 +346,8 @@ export function createRendererGL(canvas) {
   let vignette;
   try {
     cells = program(gl, CELL_VS, CELL_FS,
-      [["a_pos", 2], ["a_edge", 1], ["a_heat", 1], ["a_goal", 1], ["a_player", 1], ["a_tone", 1]]);
+      [["a_pos", 2], ["a_edge", 1], ["a_heat", 1], ["a_goal", 1], ["a_player", 1], ["a_tone", 1],
+        ["a_biome", 1], ["a_space", 1], ["a_center", 2]]);
     flat = program(gl, FLAT_VS, FLAT_FS, [["a_pos", 2], ["a_color", 4]]);
     dots = program(gl, DOT_VS, DOT_FS,
       [["a_pos", 2], ["a_uv", 2], ["a_color", 4], ["a_ring", 1], ["a_soft", 1]]);
@@ -305,6 +358,10 @@ export function createRendererGL(canvas) {
   }
   const u_cell = gl.getUniformLocation(cells.p, "u_cell");
   const u_cellB = gl.getUniformLocation(cells.p, "u_cellB");
+  const u_water = gl.getUniformLocation(cells.p, "u_water");
+  const u_grass = gl.getUniformLocation(cells.p, "u_grass");
+  const u_trees = gl.getUniformLocation(cells.p, "u_trees");
+  const u_snow = gl.getUniformLocation(cells.p, "u_snow");
   const u_hot = gl.getUniformLocation(cells.p, "u_hot");
   const u_rim = gl.getUniformLocation(cells.p, "u_rim");
   const u_rimB = gl.getUniformLocation(cells.p, "u_rimB");
@@ -389,14 +446,15 @@ export function createRendererGL(canvas) {
     return m;
   }
 
-  function fan(poly, cx, cy, heat, goal, ply, tone) {
+  function fan(poly, cx, cy, heat, goal, ply, tone, biome, space) {
     const r = inradius(poly, cx, cy);
-    cellW.ensure(poly.length * 21);
+    cellW.ensure(poly.length * 33);
     for (let i = 0; i < poly.length; i++) {
       const a = poly[i];
       const b = poly[(i + 1) % poly.length];
-      cellW.push(cx, cy, r, heat, goal, ply, tone, a.x, a.y, 0, heat, goal, ply, tone,
-        b.x, b.y, 0, heat, goal, ply, tone);
+      cellW.push(cx, cy, r, heat, goal, ply, tone, biome, space, cx, cy,
+        a.x, a.y, 0, heat, goal, ply, tone, biome, space, cx, cy,
+        b.x, b.y, 0, heat, goal, ply, tone, biome, space, cx, cy);
     }
   }
 
@@ -484,18 +542,23 @@ export function createRendererGL(canvas) {
     gl.clearColor(...COLORS.bg);
     gl.clear(gl.COLOR_BUFFER_BIT);
     if (!world) return;
-    const { diagram, graph, heat, goalHeat, playerHeat, tone, player, cell } = world;
+    const { diagram, graph, heat, goalHeat, playerHeat, tone, biome, space, player, cell } = world;
     cam = world.camera;
     const px = 1 / cam.scale; // one screen pixel in world units
 
     cellW.reset();
     for (let i = 0; i < diagram.cells.length; i++) {
       const c = diagram.cells[i];
-      fan(c.polygon, c.centroid.x, c.centroid.y, heat[i], goalHeat[i], playerHeat[i], tone[i]);
+      fan(c.polygon, c.centroid.x, c.centroid.y, heat[i], goalHeat[i], playerHeat[i], tone[i],
+        biome[i], space[i]);
     }
     gl.useProgram(cells.p);
     gl.uniform3f(u_cell, ...COLORS.cell);
     gl.uniform3f(u_cellB, ...COLORS.cellB);
+    gl.uniform3f(u_water, ...COLORS.water);
+    gl.uniform3f(u_grass, ...COLORS.grass);
+    gl.uniform3f(u_trees, ...COLORS.trees);
+    gl.uniform3f(u_snow, ...COLORS.snow);
     gl.uniform3f(u_hot, ...COLORS.hot);
     gl.uniform3f(u_rim, ...COLORS.rim);
     gl.uniform3f(u_rimB, ...COLORS.rimB);

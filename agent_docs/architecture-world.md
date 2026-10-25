@@ -89,6 +89,17 @@ The tone is also terrain: `terrainSpeed` samples it at a mover's own position an
 and every enemy's distance for the step by it. Open ground is fast, dense ground slow, for
 everyone alike.
 
+A fourth sample, `biomeAt` at `biomeScale` with its own offset, is the biome, 0..1, stored per
+site like the tone (`homes[i].biome`, copied to `world.biome` by `finishStep`). It is purely
+visual: the GL renderer maps it through a water, grass, trees, snow colour ramp with grass in
+the middle. A site whose home lies in a river band is biome 0, so rivers read as water. A fifth
+sample, `spaceAt` at `spaceScale` (far broader still) passed through a smoothstep between the
+`spaceEdge` values, is the space weight (`homes[i].space`, `world.space`): 1 inside the digital
+domain, where the GL renderer draws the plain pre-biome look whatever the biome says, with a
+border a few cells wide. Rivers inside space keep the space look. The 2D renderer ignores both.
+`finishStep` also samples both fields at the player's position into `world.playerBiome` and
+`world.playerSpace`, which the audio reads for its timbre.
+
 A fraction `deadEdgeFrac` of edges is closed to enemies. `rebuild` marks each edge's `dead`
 from `edgeHash(seed, key)`, a hash outside the `rand()` stream, so the set is fixed per seed
 and an edge keeps its state while it moves. `isDead` is passed as the skip predicate to

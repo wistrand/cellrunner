@@ -99,6 +99,13 @@ DevTools protocol instead (real time, `Runtime.evaluate` with `awaitPromise`).
 
 ## Sound design
 
+Terrain (2026-10-25): the ground under the player colours the timbre, not the piece. Water is a
+chorused, slow swell with a soft lead; the digital domain (space) is squarer and brighter with a
+saw edge on the lead and a busier arp; trees are duller in the bass and arp; snow carries a
+constant light shimmer. Weights come from `terrain()` in `audio.js`; the per-voice numbers are
+first guesses and a listening pass across a border is still open. A second, stronger step if the
+border stays too quiet: two arrangements of the one piece crossfaded by the space weight.
+
 - Music, layered and adaptive (built in phase D; changes apply at the next bar line):
   - pad and bass always;
   - arp joins after the first point or once heat reaches `ARP_HEAT`;
