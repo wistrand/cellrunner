@@ -53,15 +53,19 @@ let lastFrame = performance.now();
 let state = "start";
 let overShown = false;
 
+// A stored best that is not a finite number (an old scoring bug once saved "Infinity") is
+// discarded, and such a value is never saved.
 function loadBest() {
   try {
-    return Number(localStorage.getItem("cellrunner.best")) || 0;
+    const v = Number(localStorage.getItem("cellrunner.best"));
+    return Number.isFinite(v) && v > 0 ? v : 0;
   } catch {
     return 0;
   }
 }
 
 function saveBest() {
+  if (!Number.isFinite(best)) return;
   try {
     localStorage.setItem("cellrunner.best", String(best));
   } catch {
@@ -174,7 +178,7 @@ function frame(now) {
   if (world.dead && !wasDead) {
     diedAt = now;
     audio.stopMusic({ fade: 0.4, cadence: true });
-    if (world.score > best) {
+    if (world.score > best && Number.isFinite(world.score)) {
       best = world.score;
       saveBest();
     }

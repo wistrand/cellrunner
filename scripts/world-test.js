@@ -31,6 +31,9 @@ function run(seed, w, h, steps) {
       `seed ${seed} step ${i}: camera finite`);
     check(world.graph.nodes.has(p.node), `seed ${seed} step ${i}: player anchor node exists`);
     check(world.path.every(Number.isFinite), `seed ${seed} step ${i}: path finite`);
+    // A goal reachable only over dead edges once scored Infinity; the leg must always be finite.
+    check(Number.isFinite(world.score) && Number.isFinite(world.legBase) && world.legBase > 0,
+      `seed ${seed} step ${i}: score and leg finite`);
     check(world.path[0] === p.x && world.path[1] === p.y,
       `seed ${seed} step ${i}: path starts at the player`);
     for (const en of world.enemies) {

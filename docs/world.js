@@ -43,7 +43,8 @@ export const TUNING = {
   pointsPerCell: 2,    // points a goal pays per cell of graph distance when it was placed
   dashPenalty: 0.5,    // a goal's points are multiplied by this for every dash on the way to it
   goalSpread: 0.6,     // radians; random deviation of the next goal's direction from the path
-  goalRetreat: 1.2,    // cells the goal moves away from the player per dash
+  goalRetreat: 1.2,    // cells the goal moves away from the player on the leg's first dash
+  goalRetreatMaxSteps: 3, // the n-th dash on a leg retreats n steps of goalRetreat, up to this
   regionMargin: 1,     // grid cells kept beyond the camera view, player and goal
   regionMaxFactor: 1.6, // the region may span this many viewports per axis before pruning
   spawnMinDist: 3,     // cells; graph distance from the player below which enemies don't spawn
@@ -271,6 +272,7 @@ export function createWorld(seed, width, height) {
     distToGoal: null,
     distToPlayer: null,
     distToIntercept: null, // from the vertex nearest the player's path interceptLead ahead
+    distToPlayerHunt: null, // from the player's vertex, without dead edges; hunters descend it
     heat: null,
     goalHeat: null,
     playerHeat: null,
@@ -298,7 +300,7 @@ export function createWorld(seed, width, height) {
   resetTrail(world);
   world.path = new Float64Array(2 * TUNING.pathSamples);
   world.pathTarget = new Float64Array(2 * TUNING.pathSamples);
-  world.distToPlayer = shortestPaths(world.graph, world.player.node, isDead);
+  world.distToPlayer = shortestPaths(world.graph, world.player.node);
   placeGoal(world, world.player.x, world.player.y, 0, -1, TUNING.goalDistance,
     TUNING.goalDistance * 0.9 * cell);
   startLeg(world);
@@ -346,7 +348,7 @@ export function continueWorld(world) {
   world.airStart = -Infinity;
   world.airUntil = -Infinity;
   world.actReadyAt = world.time;
-  world.distToPlayer = shortestPaths(world.graph, world.player.node, isDead);
+  world.distToPlayer = shortestPaths(world.graph, world.player.node);
   for (const en of world.enemies) respawn(world, en);
   placeGoal(world, world.player.x, world.player.y, world.goalX - world.player.x,
     world.goalY - world.player.y, TUNING.goalDistance, TUNING.goalDistance * 0.9 * world.cell);
@@ -480,7 +482,7 @@ function applyRegion(world, next) {
     world.goalX = n.x;
     world.goalY = n.y;
   }
-  world.distToPlayer = shortestPaths(graph, world.player.node, isDead);
+  world.distToPlayer = shortestPaths(graph, world.player.node);
   // Enemies left behind in a pruned strip come back inside the view, away from the player.
   for (const en of displaced) respawn(world, en);
 }
@@ -812,13 +814,17 @@ function scoreGoal(world) {
 
 // The price of a dash: the goal moves away from the player along the player-to-goal line, and
 // must end up farther along the graph than it was.
+// Each dash on a leg retreats one step further than the last: the first dash one step of
+// goalRetreat, the second two, up to goalRetreatMaxSteps. `dash` has already counted this dash
+// in legDashes.
 function retreatGoal(world) {
   const dx = world.goalX - world.player.x;
   const dy = world.goalY - world.player.y;
   const gn = world.graph.nodes.get(world.goal);
   const current = gn ? world.distToPlayer[gn.idx] : 0;
-  placeGoal(world, world.goalX, world.goalY, dx, dy, TUNING.goalRetreat,
-    current + 0.5 * TUNING.goalRetreat * world.cell);
+  const steps = Math.min(world.legDashes, TUNING.goalRetreatMaxSteps);
+  const retreat = TUNING.goalRetreat * steps;
+  placeGoal(world, world.goalX, world.goalY, dx, dy, retreat, current + 0.5 * retreat * world.cell);
 }
 
 
@@ -1036,7 +1042,7 @@ function interceptNode(world) {
 // were computed without those edges (`isDead`), so the gradient never points into one.
 function chooseEnemyEdge(world, ent, atKey, cameBy) {
   if (ent.kind === "hunter") {
-    return nextEdgeToward(world.graph, atKey, world.distToPlayer, isDead);
+    return nextEdgeToward(world.graph, atKey, world.distToPlayerHunt, isDead);
   }
   // Stalkers cut the player off: they route to where the path leads, not where the player is.
   if (ent.kind === "stalker") {
@@ -1410,8 +1416,9 @@ export function stepWorld(world, dt, input) {
   world.goalX = gn.x;
   world.goalY = gn.y;
   world.distToGoal = shortestPaths(graph, world.goal);
-  // Enemy fields skip dead edges; the goal field does not, so the route may use them.
-  world.distToPlayer = shortestPaths(graph, p.node, isDead);
+  // Full graph: goal placement, retreat and spawn geometry read this. Hunters descend
+  // distToPlayerHunt, computed below without dead edges.
+  world.distToPlayer = shortestPaths(graph, p.node);
 
   if (input.act && isActReady(world)) dash(world);
 
@@ -1422,8 +1429,9 @@ export function stepWorld(world, dt, input) {
   updatePath(world, dt);
   movePlayer(world, TUNING.playerSpeed * world.cell * mult * dt);
   sampleTrail(world);
-  // Computed here, after the player moved and after any board growth, so stalkers read indices
-  // of the current graph.
+  // Computed here, after the player moved and after any board growth, so hunters and stalkers
+  // read indices of the current graph. Both skip dead edges, so the gradient never enters one.
+  world.distToPlayerHunt = shortestPaths(world.graph, p.node, isDead);
   world.distToIntercept = shortestPaths(world.graph, interceptNode(world), isDead);
   const speed = TUNING.enemySpeed * difficultyAt(world.goals, DIFFICULTY_SCRATCH).speed;
   for (const en of world.enemies) {

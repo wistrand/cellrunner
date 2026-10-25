@@ -92,12 +92,14 @@ everyone alike.
 A fraction `deadEdgeFrac` of edges is closed to enemies. `rebuild` marks each edge's `dead`
 from `edgeHash(seed, key)`, a hash outside the `rand()` stream, so the set is fixed per seed
 and an edge keeps its state while it moves. `isDead` is passed as the skip predicate to
-`shortestPaths` for `distToPlayer` and `distToIntercept`, to `nextEdgeToward` in
-`chooseEnemyEdge`, and to `nearestEdgePoint` in `relocate`; random walkers filter it out of
-their options, and `spawnEdge` picks a live edge at the spawn vertex. Every one of these falls
-back to any edge when no live edge exists, so an enemy is never stranded, but it can then stand
-on a dead edge until the next vertex. `distToGoal` ignores dead edges entirely, so the player's
-route may run along them: they are the safe lanes, drawn tinted by both renderers.
+`shortestPaths` for the two hunting fields, `distToPlayerHunt` and `distToIntercept`, both
+computed right before enemies move, to `nextEdgeToward` in `chooseEnemyEdge`, and to
+`nearestEdgePoint` in `relocate`; random walkers filter it out of their options, and
+`spawnEdge` picks a live edge at the spawn vertex. Every one of these falls back to any edge
+when no live edge exists, so an enemy is never stranded, but it can then stand on a dead edge
+until the next vertex. `distToPlayer` and `distToGoal` see every edge: goal placement, retreat,
+scoring and spawn geometry read them, and the player's route may run along dead edges. Those
+are the safe lanes, drawn tinted by both renderers.
 
 `world.region` is the active rectangle of grid cells; `world.bounds` is its box in world units
 and the clip rectangle for the tessellation. `ensureRegion(x, y)` grows the region to cover the
@@ -169,8 +171,10 @@ goal or closer than `minDist` along the graph from the player, the spot is pushe
 and retried, because the nearest vertex to a spot can sit well short of it. On a score the
 direction is the path just travelled (goal minus `goalOrigin`, the player position when that goal
 was set) rotated by a random angle within `goalSpread`, at `goalDistance`. On a dash,
-`retreatGoal` pushes the goal `goalRetreat` cells along the player-to-goal line and requires a
-real gain in graph distance. Border vertices are never goals: a goal on the box pins the route to
+`retreatGoal` pushes the goal along the player-to-goal line and requires a real gain in graph
+distance. The push grows with the dashes on the leg: the n-th dash retreats n steps of
+`goalRetreat`, capped at `goalRetreatMaxSteps` steps, so a second and third dash on one leg cost
+more ground than the first. Border vertices are never goals: a goal on the box pins the route to
 the wall.
 
 ## Continue
