@@ -1,7 +1,7 @@
 // Browser-only ES module: Canvas2D renderer. Owns the canvas, DPR scaling and all drawing. It
 // reads the world object produced by world.js and knows nothing about rules.
 
-import { isAirborne, airProgress, isLethal, pathReveal, TUNING } from "./world.js";
+import { isAirborne, airProgress, pathReveal, TUNING } from "./world.js";
 
 const COLORS = {
   bg: "#0b0d14",
@@ -83,6 +83,14 @@ export function createRenderer(canvas) {
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = fill;
     ctx.fill();
+  }
+
+  function ring(x, y, r, width, stroke) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.lineWidth = width;
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
   }
 
   function draw(world) {
@@ -193,19 +201,71 @@ export function createRenderer(canvas) {
     const er = cell * 0.085;
     const fadeNear = ENEMY_FADE_NEAR * cell;
     const fadeSpan = (ENEMY_FADE_FAR - ENEMY_FADE_NEAR) * cell;
+    // A shape per kind around the heading (toX, toY) and the clock, as in GL without the glow:
+    // hunters are arrowheads trailing an ember, wanderers sway with a satellite, stalkers an eye
+    // whose pupil looks ahead, splitters two lobes breathing apart, joiners a ring tightening on
+    // an inner one.
+    const t = world.time;
+    let idx = 0;
     for (const en of world.enemies) {
       const d = Math.hypot(en.x - player.x, en.y - player.y);
       const k = Math.min(1, Math.max(0, (d - fadeNear) / fadeSpan));
-      ctx.globalAlpha = 1 - (1 - ENEMY_FADE_MIN) * k;
-      dot(en.x, en.y, er * 1.35, COLORS.outline);
-      if (isLethal(en)) {
-        dot(en.x, en.y, er, COLORS[en.kind]);
+      const alpha = 1 - (1 - ENEMY_FADE_MIN) * k;
+      ctx.globalAlpha = alpha;
+      const fill = COLORS[en.kind];
+      let hx = en.toX - en.x;
+      let hy = en.toY - en.y;
+      const hl = Math.hypot(hx, hy);
+      if (hl > 1e-6) {
+        hx /= hl;
+        hy /= hl;
       } else {
-        ctx.beginPath();
-        ctx.arc(en.x, en.y, er * 0.95, 0, Math.PI * 2);
-        ctx.lineWidth = er * 0.7;
-        ctx.strokeStyle = COLORS[en.kind];
-        ctx.stroke();
+        hx = 1;
+        hy = 0;
+      }
+      const nx = -hy;
+      const ny = hx;
+      const ph = idx++ * 1.7;
+      const x = en.x;
+      const y = en.y;
+      if (en.kind === "hunter") {
+        const sx = x + hx * er * 0.9;
+        const sy = y + hy * er * 0.9;
+        dot(x, y, er * 1.35, COLORS.outline);
+        dot(sx, sy, er * 0.8, COLORS.outline);
+        dot(x, y, er, fill);
+        dot(sx, sy, er * 0.45, fill);
+        const side = er * 0.35 * Math.sin(t * 10 + ph);
+        ctx.globalAlpha = alpha * 0.55;
+        dot(x - hx * er * 1.65 + nx * side, y - hy * er * 1.65 + ny * side, er * 0.3, fill);
+      } else if (en.kind === "wanderer") {
+        const sway = er * 0.45 * Math.sin(t * 3 + ph);
+        const bx = x + nx * sway;
+        const by = y + ny * sway;
+        const oa = t * 2.5 + ph;
+        const ox = bx + Math.cos(oa) * er * 1.9;
+        const oy = by + Math.sin(oa) * er * 1.9;
+        dot(bx, by, er * 1.35, COLORS.outline);
+        dot(bx, by, er, fill);
+        dot(ox, oy, er * 0.55, COLORS.outline);
+        dot(ox, oy, er * 0.3, fill);
+      } else if (en.kind === "stalker") {
+        dot(x, y, er * 1.5, COLORS.outline);
+        ring(x, y, er * 0.9, er * 0.45, fill);
+        dot(x + hx * er * 0.3, y + hy * er * 0.3, er * 0.38, fill);
+      } else if (en.kind === "splitter") {
+        const sep = er * (0.35 + 0.4 * (0.5 + 0.5 * Math.sin(t * 2.2 + ph)));
+        for (let s = -1; s <= 1; s += 2) {
+          const lx = x + nx * sep * s;
+          const ly = y + ny * sep * s;
+          dot(lx, ly, er * 1.3, COLORS.outline);
+          ring(lx, ly, er * 0.7, er * 0.5, fill);
+        }
+      } else {
+        const squeeze = 0.8 + 0.2 * Math.sin(t * 3 + ph);
+        dot(x, y, er * 1.6, COLORS.outline);
+        ring(x, y, er * 0.95 * squeeze, er * 0.5, fill);
+        ring(x, y, er * 0.35 * (2 - squeeze), er * 0.2, fill);
       }
     }
     ctx.globalAlpha = 1;

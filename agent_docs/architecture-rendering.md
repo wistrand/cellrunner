@@ -97,8 +97,14 @@ diagram changes every frame anyway, so there is nothing to cache.
   the pulsing ring, `GOAL_SPARKS` orbiting sparks and the centre dot; halo and orbit radius
   scale with the points still on offer (`dashPenalty` to the power of `legDashes`), so dashing
   shrinks them.
-  Enemies also get a dark outline disc under the body so they stay readable over hot cells; the
-  2D renderer draws the same outline without the glow. Both renderers fade enemies by distance
+  Enemies have a shape per kind, built from dots around the heading (`toX, toY`) and the clock,
+  with a phase from the enemy's index so neighbours do not pulse in step: hunters are arrowheads
+  (body, a snout ahead, two embers trailing behind), wanderers sway sideways and carry an
+  orbiting satellite, stalkers are an eye (a ring with the pupil offset toward the heading),
+  splitters are two ringed lobes breathing apart across the heading, joiners a ring tightening
+  on an inner ring. Each gets a dark outline under every part so it stays readable over hot
+  cells; the 2D renderer draws the same shapes without the glow and with one ember. Both
+  renderers fade enemies by distance
   from the player, from full inside `ENEMY_FADE_NEAR` cells to `ENEMY_FADE_MIN` at
   `ENEMY_FADE_FAR`, so a far crowd does not compete with the near ones.
 - **Death overlay** is one flat quad covering the screen.

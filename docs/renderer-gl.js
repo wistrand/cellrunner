@@ -6,7 +6,7 @@
 // GLSL lives in template strings. Never put a backtick inside a shader comment; it terminates the
 // template literal.
 
-import { isAirborne, airProgress, isLethal, pathReveal, threat, TUNING } from "./world.js";
+import { isAirborne, airProgress, pathReveal, threat, TUNING } from "./world.js";
 
 const COLORS = {
   bg: [0.043, 0.051, 0.078, 1],
@@ -522,6 +522,7 @@ export function createRendererGL(canvas) {
   const FADE_BODY = [0, 0, 0, 0];
   const FADE_GLOW = [0, 0, 0, 0];
   const FADE_OUTLINE = [0, 0, 0, 0];
+  const FADE_DIM = [0, 0, 0, 0];
   function faded(c, a, out) {
     out[0] = c[0];
     out[1] = c[1];
@@ -648,12 +649,17 @@ export function createRendererGL(canvas) {
     }
     dot(gx, gy, cell * 0.04, gc);
 
-    // Enemies: glow, dark outline, body, all faded by distance from the player. The outline
-    // keeps them readable over hot cells. Lethal kinds are filled discs; board modifiers are
-    // thick rings with a dark hole.
+    // Enemies: glow, dark outline, body, all faded by distance from the player, and a shape per
+    // kind built from dots around the heading (toX, toY) and the clock. Hunters are arrowheads
+    // trailing two embers, wanderers sway and carry a satellite, stalkers are an eye whose pupil
+    // looks where they go, splitters are two lobes breathing apart, joiners a ring tightening on
+    // an inner one. The outline keeps them readable over hot cells. The phase per enemy comes
+    // from its index, so neighbours do not pulse in step.
     const er = cell * 0.085;
     const fadeNear = ENEMY_FADE_NEAR * cell;
     const fadeSpan = (ENEMY_FADE_FAR - ENEMY_FADE_NEAR) * cell;
+    const t = world.time;
+    let idx = 0;
     for (const en of world.enemies) {
       const d = Math.hypot(en.x - player.x, en.y - player.y);
       const k = Math.min(1, Math.max(0, (d - fadeNear) / fadeSpan));
@@ -661,14 +667,69 @@ export function createRendererGL(canvas) {
       const c = faded(COLORS[en.kind], a, FADE_BODY);
       const g = faded(COLORS[en.kind + "Glow"], a, FADE_GLOW);
       const o = faded(COLORS.outline, a, FADE_OUTLINE);
-      if (isLethal(en)) {
-        dot(en.x, en.y, er * 3.2, g, -1);
-        dot(en.x, en.y, er * 1.35, o);
-        dot(en.x, en.y, er, c);
+      const dim = faded(COLORS[en.kind], a * 0.55, FADE_DIM);
+      let hx = en.toX - en.x;
+      let hy = en.toY - en.y;
+      const hl = Math.hypot(hx, hy);
+      if (hl > 1e-6) {
+        hx /= hl;
+        hy /= hl;
       } else {
-        dot(en.x, en.y, er * 4, g, -1);
-        dot(en.x, en.y, er * 1.6, o);
-        dot(en.x, en.y, er * 1.25, c, 0.45);
+        hx = 1;
+        hy = 0;
+      }
+      const nx = -hy;
+      const ny = hx;
+      const ph = idx++ * 1.7;
+      const x = en.x;
+      const y = en.y;
+      if (en.kind === "hunter") {
+        const pulse = 0.85 + 0.15 * Math.sin(t * 9 + ph);
+        const sx = x + hx * er * 0.9;
+        const sy = y + hy * er * 0.9;
+        dot(x, y, er * 3.2 * pulse, g, -1);
+        dot(x, y, er * 1.35, o);
+        dot(sx, sy, er * 0.8, o);
+        dot(x, y, er, c);
+        dot(sx, sy, er * 0.45, c);
+        for (let j = 1; j <= 2; j++) {
+          const back = er * (0.9 + 0.75 * j);
+          const side = er * 0.35 * Math.sin(t * 10 + ph + j * 2.1);
+          dot(x - hx * back + nx * side, y - hy * back + ny * side, er * (0.4 - 0.1 * j), dim);
+        }
+      } else if (en.kind === "wanderer") {
+        const sway = er * 0.45 * Math.sin(t * 3 + ph);
+        const bx = x + nx * sway;
+        const by = y + ny * sway;
+        const oa = t * 2.5 + ph;
+        const ox = bx + Math.cos(oa) * er * 1.9;
+        const oy = by + Math.sin(oa) * er * 1.9;
+        dot(bx, by, er * 3.2, g, -1);
+        dot(bx, by, er * 1.35, o);
+        dot(bx, by, er, c);
+        dot(ox, oy, er * 0.55, o);
+        dot(ox, oy, er * 0.3, c);
+      } else if (en.kind === "stalker") {
+        const pulse = 0.9 + 0.1 * Math.sin(t * 7 + ph);
+        dot(x, y, er * 3.2 * pulse, g, -1);
+        dot(x, y, er * 1.5, o);
+        dot(x, y, er * 1.15, c, 0.6);
+        dot(x + hx * er * 0.3, y + hy * er * 0.3, er * 0.38, c);
+      } else if (en.kind === "splitter") {
+        const sep = er * (0.35 + 0.4 * (0.5 + 0.5 * Math.sin(t * 2.2 + ph)));
+        dot(x, y, er * 4, g, -1);
+        for (let s = -1; s <= 1; s += 2) {
+          const lx = x + nx * sep * s;
+          const ly = y + ny * sep * s;
+          dot(lx, ly, er * 1.3, o);
+          dot(lx, ly, er * 0.95, c, 0.45);
+        }
+      } else {
+        const squeeze = 0.8 + 0.2 * Math.sin(t * 3 + ph);
+        dot(x, y, er * 4, g, -1);
+        dot(x, y, er * 1.6, o);
+        dot(x, y, er * 1.25 * squeeze, c, 0.5);
+        dot(x, y, er * 0.45 * (2 - squeeze), c, 0.5);
       }
     }
 
