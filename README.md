@@ -14,6 +14,8 @@ No install, no build, no dependencies. Plain ES modules and a Canvas2D renderer.
 - **Click** (or Space, or Enter) to dash: for a moment you are airborne and fast, still following
   the route. Nothing can touch you until you land, however many edges you cover. The next dash
   comes a moment after landing, never in the air; the ring around you shrinks away until it is.
+  Click again while airborne to stomp: the nearest enemy under you dies and pays a few points,
+  once per dash, at the price of another dash. A stomp that finds nothing still costs.
 - Every dash pushes the gold marker away from you and halves what it will pay, and each dash on
   the way to the same marker pushes it further than the last, up to a limit. A marker
   is worth its distance when it was set; reach it without dashing and you get all of it. The HUD

@@ -45,6 +45,8 @@ const COLORS = {
   joiner: [0.62, 0.55, 1, 1],
   joinerGlow: [0.62, 0.55, 1, 0.55],
   outline: [0.03, 0.03, 0.06, 0.9],
+  stomp: [1, 1, 1, 1],           // flash where a stomp killed an enemy
+  stompMiss: [0.5, 0.6, 0.75, 1], // flash under the player when a stomp found nothing
   player: [1, 1, 1, 1],
   trail: [0.8, 0.9, 1],          // the player's fading trail (alpha from age)
   heading: [1, 1, 1, 0.9],       // the chevron ahead of the player

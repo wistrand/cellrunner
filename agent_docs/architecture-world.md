@@ -154,8 +154,10 @@ other goal; the table starts there and eases to 0.4), `speed` multiplies `enemyS
 weights (`spawnWeightsAt`): a kind stays at zero until the first row that gives it weight, and
 `spawnKind` makes a kind's first spawn after its weight turns on that kind, so stalkers,
 splitters and joiners debut at known goals. The start roster (`enemiesStart`) comes from
-`spawnKind` at goal 0, so each kind the first row turns on appears once before any roll
-(two enemies means one hunter and one wanderer), and spawns behind the player at
+`spawnKind` at goal 0, so each kind the first row turns on appears once before any roll; the
+first row has only wanderers, so the opening is two wanderers and the first hunter is the
+guaranteed spawn at goal 2 (a hunter at goal 0 halved a passive player's opening in the sweep).
+The roster spawns behind the player at
 `spawnStartMinDist` (`spawnNode` with `opening`), since enemies ahead at 3 cells met a player
 running at them within a second. Hunters, stalkers and wanderers are lethal
 (`isLethal`); only they raise heat, drive the renderer's threat pulse, push sites or trigger
@@ -227,6 +229,17 @@ not add to the base. `world.score` is the points paid, `world.goals` the goals r
 (the audio keys off `goals`), `world.lastPoints` what the last goal paid.
 
 ## The dash action
+
+A click while already airborne is a stomp (`stomp`): it is priced like a dash (`legDashes` rises
+and the goal retreats) and, if this dash has not killed yet, the nearest lethal enemy within
+`stompRadius` of the player is removed, with a `stomp` flash for the renderers and the audio, and
+the kill pays `stompPoints`, about what the dash it costs takes off the leg, and adds one to
+`spawnDebt`, so the enemy returns with the next goal's spawns: a stomp buys time and points, not
+a smaller board (without this a stomping player held the board at two to four enemies for good).
+One kill per dash (`stompedAt >= airStart` means spent); after that, clicks in the air do
+nothing, and a click that finds no enemy still pays, leaves a `stompMiss` flash under the player
+so the click is never silent, and may be tried again. The stomp reads the
+enemy positions left by the previous step, so it is resolved before enemies move this step.
 
 One input, `input.act`, read for one step only (`main.js` clears it after each step). `dash`
 sets `airStart`, `airUntil` and `actReadyAt`, shoves the mesh and retreats the goal. While

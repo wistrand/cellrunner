@@ -5,12 +5,14 @@
 //   SEED_FROM=i node scripts/difficulty.js 300 5 reactive   # seeds i..4 only, for parallel runs
 //
 // Policies: passive never dashes; reactive dashes when ready and a lethal enemy is within 0.55
-// cells; cautious the same at 0.9 cells. Seeds are 1000 + 7919 * i. A run whose score is not
+// cells; cautious the same at 0.9 cells; stomper is reactive and also clicks in the air when an
+// enemy is within stomp reach. Seeds are 1000 + 7919 * i. A run whose score is not
 // finite hit a scoring bug and is listed as invalid instead of counted. The sim runs at roughly
 // three times real time per process, so run seeds in parallel processes for long caps:
 //   for i in 0 1 2 3 4; do SEED_FROM=$i node scripts/difficulty.js 300 $((i+1)) reactive & done
 
-import { createWorld, stepWorld, isLethal, isActReady, difficultyAt } from "../docs/world.js";
+import { createWorld, stepWorld, isLethal, isActReady, isAirborne, difficultyAt, TUNING }
+  from "../docs/world.js";
 
 const DT = 1 / 60;
 const MAX_S = Number(process.argv[2] || 180);
@@ -23,6 +25,13 @@ const policies = {
   passive: () => false,
   reactive: (w) => isActReady(w) && nearestLethal(w) < 0.55,
   cautious: (w) => isActReady(w) && nearestLethal(w) < 0.9,
+  // Reactive, and while airborne clicks again the moment an enemy is within stomp reach and
+  // this dash has not killed yet (a miss costs a retreat, so it never clicks blind).
+  stomper: (w) => {
+    if (isActReady(w)) return nearestLethal(w) < 0.55;
+    if (!isAirborne(w) || w.stompedAt >= w.airStart) return false;
+    return nearestLethal(w) < TUNING.stompRadius * 0.9;
+  },
 };
 
 // Straight-line distance in cells from the player to the nearest lethal enemy.

@@ -3,7 +3,8 @@
 A browser game on a living Voronoi mesh that grows as you play. The player follows an
 auto-routed, smoothed path toward a goal vertex; enemies run the cell edges; cells drift away from
 enemy crowds; splitters and joiners reshape the board. One action: click to dash, a timed
-airborne burst during which nothing can touch the player and the goal retreats. Read this file
+airborne burst during which nothing can touch the player and the goal retreats; a second click in
+the air stomps the nearest enemy, once per dash, at the price of another dash. Read this file
 first, then the relevant file in `agent_docs/`.
 
 ```

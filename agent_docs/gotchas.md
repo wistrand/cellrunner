@@ -80,9 +80,11 @@
   runs in seconds and can miss a slow-to-appear regression. Run the full suite before a change
   to the pure modules is called done. State clearly when a change to the
   pure modules is unverified.
-- **The sheets act on pointerdown; their buttons have no handlers.** START and RESTART are
-  inside sheets whose `pointerdown` calls `act`. A click handler on the button as well would
-  start the run and then register a dash from the same click. CONTINUE stops propagation.
+- **The game-over sheet acts on pointerdown; the start sheet only through its buttons.** RESTART
+  has no handler of its own: the pointerdown bubbling from it to the sheet is the click, and a
+  click handler as well would restart and then register a dash from the same click. CONTINUE
+  stops propagation. On the start sheet a tap anywhere must not launch (people read the intro
+  and tap it), so START and CONTINUE LAST RUN have click handlers and the sheet itself has none.
 - **Create the AudioContext in a gesture, and only then.** `audio.ensure()` is called from the
   pointer and key handlers; `play` and `syncMusic` do nothing until a context exists. Calling
   `ensure` from the frame loop creates a suspended context on Safari that never plays.

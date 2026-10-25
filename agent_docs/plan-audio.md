@@ -46,9 +46,9 @@ and a seed-1 fingerprint; update it only when changing every seed's music is int
   events since its last call (the world emits none, as `main.js` already found for death). A
   different world object resets the tracker and reports nothing for that call.
 - Events: `score` (`world.score` rose), `dashStart` (`airStart` changed), `dashEnd` (airborne to
-  grounded, not on death), `goalMoved` (`goalMovedAt`; every dash and every score), `split` and
-  `join` (flashes stamped after the previous call), `death`. Each carries x, y and a pan from
-  the screen position (`panOf`).
+  grounded, not on death), `goalMoved` (`goalMovedAt`; every dash and every score), `split`,
+  `join`, `stomp` and `stompMiss` (flashes stamped after the previous call), `death`. Each
+  carries x, y and a pan from the screen position (`panOf`).
 - Signals on the tracker: `threat` (0..1, 0 once dead) and `enemyCount` (lethal enemies).
 - `threat(world)` and `TUNING.threatRange` live in `world.js`; the GL pulse and the audio read
   the same value.
@@ -119,7 +119,9 @@ border stays too quiet: two arrangements of the one piece crossfaded by the spac
 - SFX tied to the harmony (built in phase C, `playEvent` in `audio.js`):
   - `score`: the current chord rising from the next 16th, then its root an octave up;
   - `dashStart`: a rising sine (300 to 640 Hz) with a band of noise riding on it; a wide noise
-    sweep alone read as hiss (2026-10-25). `dashEnd`: a short falling triangle tick;
+    sweep alone read as hiss (2026-10-25). `dashEnd`: a short falling triangle tick; `stomp`:
+    a low thud (sine 160 to 55 Hz) under a short burst of dark noise; `stompMiss`: the same thud
+    smaller and without the noise, so an airborne click is never silent;
   - `split`: a blip rising a fifth from the chord's top tone; `join`: one falling a fifth onto
     the chord's root; both panned to their position;
   - enemy approach: a low pulse on the chord root, one per beat, eighth or sixteenth as `threat`

@@ -22,6 +22,8 @@ const COLORS = {
   splitter: "#4debbf",
   joiner: "#998cff",
   outline: "rgba(8,8,15,0.9)",
+  stomp: "#ffffff",        // flash where a stomp killed an enemy
+  stompMiss: "#8099bf",    // flash under the player when a stomp found nothing
   player: "#ffffff",
   trail: [204, 230, 255],  // RGB; alpha from age
   heading: "rgba(255,255,255,0.9)",

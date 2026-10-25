@@ -67,7 +67,10 @@ export function diffWorld(tr, world) {
     if (world.goalMovedAt !== tr.goalMovedAt) push(tr, world, "goalMoved", world.goalX, world.goalY);
     // Board edits push a flash stamped with the step's time.
     for (const f of world.flashes) {
-      if (f.start > tr.time) push(tr, world, f.kind === "splitter" ? "split" : "join", f.x, f.y);
+      if (f.start > tr.time) {
+        const type = f.kind === "splitter" ? "split" : f.kind === "joiner" ? "join" : f.kind;
+        push(tr, world, type, f.x, f.y); // "stomp" and "stompMiss" pass through by name
+      }
     }
     if (world.dead && !tr.dead) push(tr, world, "death", p.x, p.y);
   }

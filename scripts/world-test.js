@@ -118,6 +118,37 @@ if (!QUICK) {
   }
 }
 
+// Stomp: a second click while airborne kills the nearest lethal enemy within stompRadius, once
+// per dash, and costs a dash (the leg's dash count rises). The enemy is moved onto the player by
+// hand, which the step accepts since the stomp reads last step's positions.
+{
+  const w = createWorld(555, 1000, 700);
+  stepWorld(w, 1 / 60, { act: true }); // take off
+  const victim = w.enemies.find((en) => en.kind === "hunter" || en.kind === "wanderer");
+  check(!!victim, "stomp: a lethal enemy exists to test on");
+  if (victim) {
+    const before = w.enemies.length;
+    const dashes = w.legDashes;
+    const score = w.score;
+    victim.x = w.player.x;
+    victim.y = w.player.y;
+    stepWorld(w, 1 / 60, { act: true }); // the stomp
+    check(w.enemies.length === before - 1 && !w.enemies.includes(victim), "stomp: the enemy died");
+    check(w.flashes.some((f) => f.kind === "stomp"), "stomp: a flash marks the kill");
+    check(w.legDashes === dashes + 1, "stomp: priced as a dash");
+    check(w.score === score + TUNING.stompPoints, "stomp: the kill pays stompPoints");
+    const other = w.enemies.find((en) => en.kind === "hunter" || en.kind === "wanderer");
+    if (other) {
+      other.x = w.player.x;
+      other.y = w.player.y;
+      const n = w.enemies.length;
+      stepWorld(w, 1 / 60, { act: true });
+      check(w.enemies.length === n && w.legDashes === dashes + 1,
+        "stomp: only one kill per dash, and no second charge");
+    }
+  }
+}
+
 // Save and restore: a world serialized mid-run and restored must continue exactly as the
 // original does under the same inputs, draws included (the PRNG state travels with the save).
 {

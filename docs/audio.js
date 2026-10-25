@@ -542,6 +542,15 @@ export function createAudio({ context = null } = {}) {
       case "dashEnd":
         tone({ freq: 900, to: 450, type: "triangle", gain: 0.08, dur: 0.07, pan });
         break;
+      case "stomp":
+        // A kill from the air: a low thud (falling sine) under a short burst of dark noise.
+        tone({ freq: 160, to: 55, type: "sine", gain: 0.5, dur: 0.26, attack: 0.004, pan });
+        noise({ from: 900, to: 150, q: 1.2, gain: 0.4, dur: 0.18, pan });
+        break;
+      case "stompMiss":
+        // The same thud, smaller and without the noise: the click landed, nothing was under it.
+        tone({ freq: 140, to: 70, type: "sine", gain: 0.26, dur: 0.14, attack: 0.004, pan });
+        break;
       case "split": {
         const top = chordNow(6, [84, 88, 91]);
         tone({ freq: midiToFreq(top[top.length - 1]), to: midiToFreq(top[top.length - 1] + 7),

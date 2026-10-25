@@ -24,6 +24,7 @@ const hudSlots = {
 const ui = {
   start: document.getElementById("start"),
   startBest: document.getElementById("start-best"),
+  startBtn: document.getElementById("start-btn"),
   startContinue: document.getElementById("start-continue"),
   over: document.getElementById("gameover"),
   overScore: document.getElementById("over-score"),
@@ -272,17 +273,20 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
-// Sheets: a click anywhere on one acts (start, or restart once the delay has passed), so the
-// START and RESTART buttons have no handlers of their own: the pointerdown bubbling from them
-// is the click, and a second handler would also register a dash. CONTINUE stops its pointerdown
-// from reaching the sheet.
-for (const sheet of [ui.start, ui.over]) {
-  sheet.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
-    if (audioOn) audio.ensure();
-    act(performance.now());
-  });
-}
+// The game-over sheet: a click anywhere on it restarts once the delay has passed, so RESTART has
+// no handler of its own (the pointerdown bubbling from it is the click, and a second handler
+// would also register a dash); CONTINUE stops its pointerdown from reaching the sheet. The start
+// sheet is different: only its two buttons act, so a stray tap on the intro does not launch.
+ui.over.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  if (audioOn) audio.ensure();
+  act(performance.now());
+});
+ui.startBtn.addEventListener("click", (e) => {
+  e.currentTarget.blur();
+  if (audioOn) audio.ensure();
+  if (state === "start") startRun(seed);
+});
 ui.continueBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
 ui.continueBtn.addEventListener("click", () => {
   if (audioOn) audio.ensure();

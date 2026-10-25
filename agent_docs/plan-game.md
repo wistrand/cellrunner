@@ -97,10 +97,14 @@ under budget on a mid-range phone.
       follow-up if cell size alone does not read.
 - [x] Difficulty curve beyond "one more enemy per goal": `spawnTable` by goals reached sets the
       enemy mix, the spawn rate per goal and the enemy speed; new kinds debut at fixed goals.
-      Tuned 2026-10-25 with a headless sweep: a reactive player (dash when a killer is within
-      0.55 cells) lasts a median 143 s and 31 goals over five seeds, 60 s on the hardest seed,
-      208 s on the easiest; a passive player lasts about 30 s. Pace climbs from 3.6 s per goal
-      at the start to over 7 s past goal 30.
+      Measured 2026-10-25 evening with `scripts/difficulty.js`, five seeds, 300 s cap: passive
+      median 32 s and 8 goals; reactive (dash when a killer is within 0.55 cells) median 119 s
+      and 26 goals, 76 to 257 s, ending at 13 to 16 enemies; stomper (reactive plus a stomp
+      whenever an enemy is in reach) median 216 s and 36 goals, two of five runs reaching the
+      cap at about 40 goals and 13 to 14 enemies. Before a kill added to `spawnDebt`, the
+      stomper held the board at two to four enemies indefinitely. Open: the stomper still
+      outlasts the cap on easy seeds; candidates are a kill costing two spawns, or a stomp
+      allowed only every other dash.
 - [x] Procedural audio (astrocatch's `audio.js` is a reference, not a dependency); see
       [architecture-audio.md](architecture-audio.md). A phone listening pass is still open.
 

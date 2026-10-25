@@ -17,6 +17,9 @@ export const TUNING = {
   boostMult: 2.2,      // speed multiplier while airborne
   jumpDuration: 0.7,   // s in the air: untouchable, boosted, still following the route
   landCooldown: 0.4,   // s after landing before the next dash; no dash can start while airborne
+  stompRadius: 0.6,    // cells; an airborne click kills the nearest lethal enemy within this,
+                       // once per dash, at the price of a dash (`stomp`)
+  stompPoints: 8,      // points a kill pays; about what the dash it costs takes off a leg
   enemySpeed: 1.0,     // cells / s, times the table's `speed`
   // Difficulty by goals reached (astrocatch's spawn table): each row is a control point and the
   // columns interpolate linearly between rows and plateau past the last. `spawn` is enemies
@@ -24,7 +27,8 @@ export const TUNING = {
   // weights normalised when sampled. A kind stays at 0 until the first row that gives it weight,
   // so its `at` is the goal it can first appear; `spawnKind` guarantees it does appear then.
   spawnTable: [
-    { at: 0, spawn: 0.5, speed: 1.0, hunter: 40, wanderer: 60, stalker: 0, splitter: 0, joiner: 0 },
+    { at: 0, spawn: 0.5, speed: 1.0, hunter: 0, wanderer: 100, stalker: 0, splitter: 0, joiner: 0 },
+    { at: 2, spawn: 0.5, speed: 1.0, hunter: 40, wanderer: 60, stalker: 0, splitter: 0, joiner: 0 },
     { at: 7, spawn: 0.5, speed: 1.0, hunter: 40, wanderer: 60, stalker: 0, splitter: 0, joiner: 0 },
     { at: 8, spawn: 0.5, speed: 1.0, hunter: 40, wanderer: 45, stalker: 15, splitter: 0, joiner: 0 },
     { at: 15, spawn: 0.4, speed: 1.0, hunter: 36, wanderer: 36, stalker: 18, splitter: 10, joiner: 0 },
@@ -329,6 +333,7 @@ export function createWorld(seed, width, height) {
     airStart: -Infinity,
     airUntil: -Infinity,
     actReadyAt: 0,
+    stompedAt: -Infinity, // time of the current dash's kill; >= airStart means it is spent
   };
   world.bounds = boundsOf(world, world.region);
   const fresh = [];
@@ -353,8 +358,9 @@ export function createWorld(seed, width, height) {
   world.camera = cameraTarget(world);
   ensureRegion(world, world.goalX, world.goalY);
   updatePath(world, 0);
-  // spawnKind, not rollKind: each kind the first row turns on appears once before any roll, so
-  // a two-enemy roster is always one hunter and one wanderer rather than a 36% chance of none.
+  // spawnKind, not rollKind: each kind the first row turns on appears once before any roll. The
+  // first row has only wanderers, so the opening is two wanderers and the first hunter arrives
+  // with the spawn at goal 2 (a guaranteed hunter at goal 0 halved a passive player's opening).
   for (let i = 0; i < TUNING.enemiesStart; i++) spawnEnemy(world, spawnKind(world), true);
   finishStep(world);
   return world;
@@ -392,7 +398,7 @@ const SAVE_FIELDS = ["seed", "cell", "view", "region", "bounds", "sites", "homes
   "trailHead", "trailAt", "enemies", "goal", "goalX", "goalY", "goalOriginX", "goalOriginY",
   "goalMovedAt", "legRevealAt", "goalPlacedDist", "legBase", "legDashes", "goals", "spawnDebt",
   "lastPoints", "playerBiome", "playerSpace", "camera", "camGoal", "score", "time", "dead",
-  "airStart", "airUntil", "actReadyAt"];
+  "airStart", "airUntil", "actReadyAt", "stompedAt"];
 const SAVE_TYPED = ["path", "pathTarget", "trail"];
 const SAVE_VERSION = 1;
 const infReplacer = (k, v) => (v === Infinity ? "+Inf" : v === -Infinity ? "-Inf" : v);
@@ -1224,6 +1230,44 @@ function dash(world) {
   retreatGoal(world);
 }
 
+// The second click of a dash, a stomp: priced like a dash (the goal retreats, the leg's points
+// halve), and if this dash has not killed yet, the nearest lethal enemy within stompRadius of
+// the player dies, marked by a flash. One kill per dash; once spent, further clicks in the air
+// do nothing, and a click that finds no enemy pays the price and may be tried again. Uses the
+// enemy positions from the end of the previous step; the kill does not wait for them to move.
+function stomp(world) {
+  if (world.stompedAt >= world.airStart) return;
+  world.legDashes++;
+  retreatGoal(world);
+  const { player, cell, enemies } = world;
+  let best = -1;
+  let bestD = (TUNING.stompRadius * cell) ** 2;
+  for (let i = 0; i < enemies.length; i++) {
+    const en = enemies[i];
+    if (!isLethal(en)) continue;
+    const d = dist2(player.x, player.y, en.x, en.y);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  if (best < 0) {
+    // Nothing in reach: the attempt is still marked, under the player, so the click is never
+    // silent.
+    world.flashes.push({ x: player.x, y: player.y, start: world.time, kind: "stompMiss" });
+    return;
+  }
+  const en = enemies[best];
+  world.flashes.push({ x: en.x, y: en.y, start: world.time, kind: "stomp" });
+  enemies.splice(best, 1);
+  world.stompedAt = world.time;
+  world.score += TUNING.stompPoints;
+  // The kill is a reprieve, not a cull: the enemy comes back with the next goal's spawns, so
+  // stomping buys time and points without flattening the difficulty curve. (Measured without
+  // this, a stomping player held the board at two to four enemies indefinitely.)
+  world.spawnDebt += 1;
+}
+
 // Takeoff: a one-off radial velocity kick to sites near the player. The spring in moveSites
 // brings them back, so the mesh bulges where the player left and relaxes over about a second.
 function shove(world) {
@@ -1575,6 +1619,7 @@ export function stepWorld(world, dt, input) {
   world.distToPlayer = shortestPaths(graph, p.node);
 
   if (input.act && isActReady(world)) dash(world);
+  else if (input.act && isAirborne(world)) stomp(world);
 
   // The camera may have drifted toward an untessellated strip; keep the view covered.
   ensureRegion(world, world.goalX, world.goalY);
