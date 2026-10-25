@@ -23,8 +23,11 @@ No install, no build, no dependencies. Plain ES modules and a Canvas2D renderer.
   Pale blue edges are closed to enemies; the route may use them, so they are the safe lanes.
 - **R** starts a new run. On the game-over sheet, **C**, Space, Enter or CONTINUE keep the board
   and the enemy mix and start the score from zero; a click restarts. `?seed=N` in the URL reproduces a field.
-- **M** mutes and unmutes. The music is composed from the seed, so a seed also reproduces the
-  tune. `?audio=0` keeps sound off entirely.
+- **M** or the speaker icon mutes and unmutes. The music is composed from the seed, so a seed
+  also reproduces the tune. `?audio=0` keeps sound off entirely.
+- **P**, Escape or the pause icon pauses the game and the music; P, Space or a click resumes. A
+  hidden tab pauses too.
+- **F** or the corner icon toggles fullscreen, where the browser allows it.
 
 Red enemies hunt you along the shortest path. Pink ones wander. Lime ones cut you off by heading
 for where your route is going. Two hollow kinds are harmless to touch but reshape the board: teal

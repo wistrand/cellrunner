@@ -36,6 +36,7 @@ export function createAudio({ context = null } = {}) {
   // Music state.
   let piece = null;
   let wanted = false; // the caller wants music (survives tab hide)
+  let pausedMusic = false; // pauseMusic() holds the piece; a tab un-hide must not restart it
   let running = false; // the scheduler loop is active
   let timer = null;
   let nextBar = 0;
@@ -336,7 +337,7 @@ export function createAudio({ context = null } = {}) {
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) halt();
-      else if (wanted) run();
+      else if (wanted && !pausedMusic) run();
     });
   }
 
@@ -460,6 +461,7 @@ export function createAudio({ context = null } = {}) {
       piece = p;
       nextBar = 0;
       wanted = true;
+      pausedMusic = false;
       halt();
       if (ensure()) newSong();
       run();
@@ -469,10 +471,23 @@ export function createAudio({ context = null } = {}) {
     stopMusic({ fade = 0.3, cadence = false } = {}) {
       const was = running && piece;
       wanted = false;
+      pausedMusic = false;
       halt();
       if (!ctx) return;
       endSong(fade);
       if (cadence && was) playCadence();
+    },
+    // Pause: stop scheduling and fade what is queued, keeping the bar position. Resume picks
+    // the piece up at that bar if it is still wanted. A tab un-hide does not resume a paused
+    // piece.
+    pauseMusic(fade = 0.2) {
+      pausedMusic = true;
+      halt();
+      if (ctx) endSong(fade);
+    },
+    resumeMusic() {
+      pausedMusic = false;
+      if (wanted && piece) run();
     },
     // Updates in place (main.js calls this every frame). Missing fields keep their value.
     setMusicParams({ energy, density, open, layers } = {}) {

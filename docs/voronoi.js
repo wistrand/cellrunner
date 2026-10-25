@@ -48,33 +48,58 @@ export function jitteredSites(bounds, cols, rows, rand, margin = 0.15) {
   return sites;
 }
 
-// Clip a convex polygon (array of {x, y, tag}) to the half-plane nx*x + ny*y <= c.
+// Clipper scratch, reused across cells and across calls so a rebuild allocates only what it
+// returns. Two vertex arrays ping-pong between clips (a clip reads one and writes the other) and
+// hold their live length separately, since stale entries past it are left in place. Vertex
+// objects come from a pool that is reset per cell: a cell's working vertices live only until
+// `finishCell` copies the survivors into fresh objects, so nothing returned aliases the pool,
+// and the pool never grows past the most vertices one cell ever created. `computeVoronoi` is
+// therefore not re-entrant; nothing calls it recursively.
+const POLY_A = [];
+const POLY_B = [];
+const VPOOL = [];
+let vTop = 0;
+function vertex(x, y, tag) {
+  let v = VPOOL[vTop];
+  if (v === undefined) {
+    v = { x: 0, y: 0, tag: 0 };
+    VPOOL.push(v);
+  }
+  vTop++;
+  v.x = x;
+  v.y = y;
+  v.tag = tag;
+  return v;
+}
+
+// Clip the convex polygon in `src[0..n)` to the half-plane nx*x + ny*y <= c, writing the result
+// into `dst` and returning its length. `src` and `dst` must be different arrays.
 // `tag` on a vertex identifies the edge that starts at that vertex: a BOX_* side for a
-// bounding-box edge, otherwise the index of the site whose bisector produced it. Vertices introduced on the clip
-// line carry `tag` for the new edge; vertices where the polygon re-enters keep the original edge's
-// tag. This is how adjacency falls out of the clipping for free.
-function clipHalfPlane(poly, nx, ny, c, tag) {
-  const out = [];
-  const n = poly.length;
+// bounding-box edge, otherwise the index of the site whose bisector produced it. Vertices
+// introduced on the clip line carry `tag` for the new edge; vertices where the polygon re-enters
+// keep the original edge's tag. This is how adjacency falls out of the clipping for free.
+function clipHalfPlane(src, n, dst, nx, ny, c, tag) {
+  let m = 0;
   for (let i = 0; i < n; i++) {
-    const a = poly[i];
-    const b = poly[(i + 1) % n];
+    const a = src[i];
+    const b = src[i + 1 === n ? 0 : i + 1];
     const da = nx * a.x + ny * a.y - c;
     const db = nx * b.x + ny * b.y - c;
     const aIn = da <= EPS;
     const bIn = db <= EPS;
-    if (aIn) out.push(a);
+    if (aIn) dst[m++] = a;
     if (aIn !== bIn) {
       const t = da / (da - db);
-      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, tag: aIn ? tag : a.tag });
+      dst[m++] = vertex(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, aIn ? tag : a.tag);
     }
   }
-  return out;
+  return m;
 }
 
-function circumradius2(site, poly) {
+function circumradius2(site, poly, n) {
   let m = 0;
-  for (const v of poly) {
+  for (let i = 0; i < n; i++) {
+    const v = poly[i];
     const dx = v.x - site.x;
     const dy = v.y - site.y;
     const d = dx * dx + dy * dy;
@@ -116,13 +141,15 @@ export function computeVoronoi(sites, bounds) {
   const cells = new Array(n);
   for (let i = 0; i < n; i++) {
     const s = sites[i];
-    let poly = [
-      { x, y, tag: BOX_TOP },
-      { x: x + w, y, tag: BOX_RIGHT },
-      { x: x + w, y: y + h, tag: BOX_BOTTOM },
-      { x, y: y + h, tag: BOX_LEFT },
-    ];
-    let r2 = circumradius2(s, poly);
+    vTop = 0;
+    let poly = POLY_A;
+    let other = POLY_B;
+    let len = 4;
+    poly[0] = vertex(x, y, BOX_TOP);
+    poly[1] = vertex(x + w, y, BOX_RIGHT);
+    poly[2] = vertex(x + w, y + h, BOX_BOTTOM);
+    poly[3] = vertex(x, y + h, BOX_LEFT);
+    let r2 = circumradius2(s, poly, len);
     const cx0 = col[i];
     const cy0 = row[i];
     for (let k = 0; k <= maxRing; k++) {
@@ -158,11 +185,14 @@ export function computeVoronoi(sites, bounds) {
         const nx = o.x - s.x;
         const ny = o.y - s.y;
         const c = nx * (s.x + o.x) * 0.5 + ny * (s.y + o.y) * 0.5;
-        poly = clipHalfPlane(poly, nx, ny, c, tags[j]);
-        r2 = circumradius2(s, poly);
+        len = clipHalfPlane(poly, len, other, nx, ny, c, tags[j]);
+        const t = poly;
+        poly = other;
+        other = t;
+        r2 = circumradius2(s, poly, len);
       }
     }
-    cells[i] = finishCell(s, poly, tags[i]);
+    cells[i] = finishCell(s, poly, len, tags[i]);
   }
   return { sites, bounds, cells };
 }
@@ -173,27 +203,35 @@ function dist2(a, b) {
   return dx * dx + dy * dy;
 }
 
-function finishCell(site, raw, id) {
+// `raw[0..n)` is clipper scratch; everything returned is freshly allocated.
+function finishCell(site, raw, n, id) {
   // Drop zero-length edges: when a clip line passes through an existing vertex the polygon gets
   // two coincident vertices. Dropping the first keeps the second's tag, which is the real
   // outgoing edge. Without this the edge graph would contain zero-length edges.
-  const poly = [];
-  for (let k = 0; k < raw.length; k++) {
+  const polygon = [];
+  for (let k = 0; k < n; k++) {
     const v = raw[k];
-    const w = raw[(k + 1) % raw.length];
+    const w = raw[k + 1 === n ? 0 : k + 1];
     if (Math.abs(v.x - w.x) < MERGE_EPS && Math.abs(v.y - w.y) < MERGE_EPS) continue;
-    poly.push(v);
+    polygon.push({ x: v.x, y: v.y, tag: v.tag });
   }
-  const seen = new Set();
-  for (const v of poly) if (v.tag >= 0) seen.add(v.tag);
-  const neighbors = [...seen].sort((a, b) => a - b);
+  // Neighbours: the site tags on the surviving vertices, ascending, no duplicates.
+  const neighbors = [];
+  for (const v of polygon) if (v.tag >= 0) neighbors.push(v.tag);
+  neighbors.sort((a, b) => a - b);
+  let kept = 0;
+  for (let i = 0; i < neighbors.length; i++) {
+    if (i === 0 || neighbors[i] !== neighbors[i - 1]) neighbors[kept++] = neighbors[i];
+  }
+  neighbors.length = kept;
   // Shoelace area + centroid.
   let area = 0;
   let cx = 0;
   let cy = 0;
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i];
-    const b = poly[(i + 1) % poly.length];
+  const m = polygon.length;
+  for (let i = 0; i < m; i++) {
+    const a = polygon[i];
+    const b = polygon[i + 1 === m ? 0 : i + 1];
     const cross = a.x * b.y - b.x * a.y;
     area += cross;
     cx += (a.x + b.x) * cross;
@@ -201,7 +239,6 @@ function finishCell(site, raw, id) {
   }
   area *= 0.5;
   const inv = area !== 0 ? 1 / (6 * area) : 0;
-  const polygon = poly.map((v) => ({ x: v.x, y: v.y, tag: v.tag }));
   return { id, site, polygon, neighbors, area: Math.abs(area),
     centroid: { x: cx * inv, y: cy * inv } };
 }

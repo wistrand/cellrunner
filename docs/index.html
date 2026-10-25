@@ -45,8 +45,6 @@
   #hud-score { min-width: 9ch; }
   #hud-next { min-width: 8ch; }
   #hud-best { min-width: 8ch; }
-  #hud-dash { min-width: 10ch; }
-  #hud-sound { min-width: 9ch; }
   #hud.hidden { display: none; }
   @media (max-width: 480px) {
     #hud { font-size: 14px; gap: 0.8em; }
@@ -74,11 +72,53 @@
   .overlay > * { flex-shrink: 0; }
   .overlay.hidden { opacity: 0; pointer-events: none; }
   /* The game-over sheet is more transparent so the board behind it stays readable. */
-  #gameover {
+  #gameover, #paused {
     background: rgba(11, 13, 20, 0.4);
     backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(3px);
   }
+  #paused { justify-content: center; padding-top: 0; }
+  /* Icon buttons (mute, pause): lower right during play, outside #hud so they take clicks. */
+  #icons {
+    position: fixed;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    right: calc(12px + env(safe-area-inset-right));
+    display: flex;
+    gap: 8px;
+  }
+  #icons.hidden { display: none; }
+  #icons-left {
+    position: fixed;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: calc(12px + env(safe-area-inset-left));
+    display: flex;
+    gap: 8px;
+  }
+  #icons-left.hidden { display: none; }
+  /* The fullscreen button shows one of two glyphs by its `fs` class. Its glyphs are strokes. */
+  #fs-btn svg { fill: none; }
+  #fs-btn .exit, #fs-btn.fs .enter { display: none; }
+  #fs-btn.fs .exit { display: block; }
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+    background: rgba(11, 13, 20, 0.35);
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+  }
+  .icon-btn:hover { color: #fff; border-color: rgba(255, 255, 255, 0.4); }
+  .icon-btn svg { width: 16px; height: 16px; fill: currentColor; }
+  .icon-btn.hidden { display: none; }
+  /* The mute button shows one of two glyphs by its `muted` class. */
+  #mute-btn .off, #mute-btn.muted .on { display: none; }
+  #mute-btn.muted .off { display: block; }
   h1 {
     font-size: clamp(32px, 10vw, 56px); /* ten letters must fit a phone width */
     font-weight: 750;
@@ -153,7 +193,6 @@
 <canvas id="field"></canvas>
 <div id="hud" class="hidden">
   <span id="hud-score"></span><span id="hud-next"></span><span id="hud-best"></span>
-  <span id="hud-dash"></span><span id="hud-sound"></span>
 </div>
 
 <div id="start" class="overlay">
@@ -165,6 +204,33 @@
     the route. <b>Click</b> to dash: airborne, fast, untouchable, but the marker retreats and pays
     half. Reach it without dashing for the full score. Enemies run the edges too; new kinds join
     as you score.</div>
+</div>
+
+<div id="icons-left" class="hidden">
+  <button id="fs-btn" class="icon-btn" aria-label="Fullscreen" title="Fullscreen (F)">
+    <svg class="enter" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"
+      stroke-width="1.6" stroke-linecap="round"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
+    <svg class="exit" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"
+      stroke-width="1.6" stroke-linecap="round"><path d="M6 2v4H2M10 6V2M10 6h4M14 10h-4v4M2 10h4v4"/></svg>
+  </button>
+</div>
+
+<div id="icons" class="hidden">
+  <button id="mute-btn" class="icon-btn" aria-label="Mute" title="Mute (M)">
+    <svg class="on" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"/>
+      <path d="M11 5.5a3 3 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+    <svg class="off" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"/>
+      <path d="M10.5 6l4 4M14.5 6l-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+  </button>
+  <button id="pause-btn" class="icon-btn" aria-label="Pause" title="Pause (P)">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="1"/>
+      <rect x="9.5" y="2" width="3.5" height="12" rx="1"/></svg>
+  </button>
+</div>
+
+<div id="paused" class="overlay hidden">
+  <div class="tag">paused</div>
+  <div class="keys">P, space or click to resume</div>
 </div>
 
 <div id="gameover" class="overlay hidden">

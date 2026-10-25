@@ -2,7 +2,7 @@
 // geometry in voronoi.js and graph.js, drawing in renderer.js, sound in audio.js (events from
 // audio-events.js, music from music.js).
 
-import { createWorld, stepWorld, continueWorld, setView, isAirborne, isActReady, legPoints }
+import { createWorld, stepWorld, continueWorld, setView, legPoints }
   from "./world.js";
 import { createRenderer as createRenderer2D } from "./renderer.js";
 import { createRendererGL } from "./renderer-gl.js";
@@ -20,8 +20,6 @@ const hudSlots = {
   score: document.getElementById("hud-score"),
   next: document.getElementById("hud-next"),
   best: document.getElementById("hud-best"),
-  dash: document.getElementById("hud-dash"),
-  sound: document.getElementById("hud-sound"),
 };
 const ui = {
   start: document.getElementById("start"),
@@ -30,7 +28,15 @@ const ui = {
   overScore: document.getElementById("over-score"),
   overLine: document.getElementById("over-line"),
   continueBtn: document.getElementById("continue-btn"),
+  icons: document.getElementById("icons"),
+  iconsLeft: document.getElementById("icons-left"),
+  fsBtn: document.getElementById("fs-btn"),
+  muteBtn: document.getElementById("mute-btn"),
+  pauseBtn: document.getElementById("pause-btn"),
+  paused: document.getElementById("paused"),
 };
+// Fullscreen is an optional extra: no API (iPhone Safari), no button.
+const FULLSCREEN_OK = typeof document.documentElement.requestFullscreen === "function";
 // WebGL2 by default; ?gl=0 forces Canvas2D, which is also the fallback when WebGL2 is missing.
 // A failed webgl2 getContext leaves the canvas free for a 2d context.
 const renderer = (params.get("gl") !== "0" && createRendererGL(canvas)) || createRenderer2D(canvas);
@@ -52,6 +58,7 @@ let lastFrame = performance.now();
 // RESTART_DELAY_MS after death so the catch is seen and a late click does not restart.
 let state = "start";
 let overShown = false;
+let paused = false; // only meaningful in "play": the world is drawn, not stepped
 
 // A stored best that is not a finite number (an old scoring bug once saved "Infinity") is
 // discarded, and such a value is never saved.
@@ -87,9 +94,14 @@ function show(el, on) {
 function enterPlay() {
   state = "play";
   overShown = false;
+  paused = false;
   show(ui.start, false);
   show(ui.over, false);
+  show(ui.paused, false);
   show(hud, true);
+  show(ui.icons, true);
+  show(ui.muteBtn, audioOn);
+  show(ui.iconsLeft, FULLSCREEN_OK);
 }
 
 function startRun(s) {
@@ -110,7 +122,10 @@ function showStart() {
   ui.startBest.textContent = best > 0 ? `best ${best}` : "\u00a0";
   show(ui.start, true);
   show(ui.over, false);
+  show(ui.paused, false);
   show(hud, false);
+  show(ui.icons, false);
+  show(ui.iconsLeft, false);
 }
 
 function showGameOver() {
@@ -119,7 +134,25 @@ function showGameOver() {
   ui.overScore.textContent = String(world.score);
   ui.overLine.textContent = `${world.goals} goal${world.goals === 1 ? "" : "s"} · best ${best}`;
   show(ui.over, true);
+  show(ui.paused, false);
   show(hud, false);
+  show(ui.icons, false);
+  show(ui.iconsLeft, false);
+}
+
+// Pause: the world is drawn but not stepped, the music plays on without threat, and the sheet
+// over the field takes the resume click so it never registers as a dash. Only during play; a
+// hidden tab pauses too, since a long gap would otherwise land as one clamped step.
+function setPaused(on) {
+  if (state !== "play" || world.dead || paused === on) return;
+  paused = on;
+  show(ui.paused, on);
+  if (on) {
+    audio.setThreat(0);
+    audio.pauseMusic();
+  } else {
+    audio.resumeMusic();
+  }
 }
 
 // The AudioContext needs a user gesture, so the music of the first game starts on the first
@@ -134,11 +167,6 @@ function randomSeed() {
   return (Math.random() * 0xffffffff) >>> 0;
 }
 
-// The sound mark: off by URL, muted (M restores), or the key hint while sound is on.
-function soundMark() {
-  if (!audioOn) return "sound off";
-  return audio.isMuted() ? "muted (M)" : "M mutes";
-}
 
 // One slot per reading (see #hud in index.html); only the text that changed moves.
 function setSlot(slot, text) {
@@ -148,15 +176,9 @@ function setSlot(slot, text) {
 function updateHud(now) {
   setSlot(hudSlots.score, `score ${world.score}`);
   setSlot(hudSlots.best, `best ${best}`);
-  setSlot(hudSlots.sound, soundMark());
-  if (world.dead) {
-    setSlot(hudSlots.next, "");
-    setSlot(hudSlots.dash, "caught");
-    return;
-  }
-  setSlot(hudSlots.next, `next +${legPoints(world)}`);
-  const dash = isAirborne(world) ? "dashing" : isActReady(world) ? "dash ready" : "dash …";
-  setSlot(hudSlots.dash, dash);
+  setSlot(hudSlots.next, world.dead ? "" : `next +${legPoints(world)}`);
+  // The speaker icon follows the mute state, whichever way it was toggled.
+  if (audioOn) ui.muteBtn.classList.toggle("muted", audio.isMuted());
 }
 
 function frame(now) {
@@ -165,6 +187,13 @@ function frame(now) {
   if (state === "start") {
     // The welcome sheet sits over a still field: drawn, not stepped.
     renderer.draw(world);
+    requestAnimationFrame(frame);
+    return;
+  }
+  if (paused) {
+    input.act = false;
+    renderer.draw(world);
+    updateHud(now);
     requestAnimationFrame(frame);
     return;
   }
@@ -198,6 +227,10 @@ function act(now) {
     if (now - diedAt > RESTART_DELAY_MS) startRun(randomSeed());
     return;
   }
+  if (paused) {
+    setPaused(false); // the action resumes; it is not a dash
+    return;
+  }
   input.act = true;
 }
 
@@ -225,6 +258,36 @@ ui.continueBtn.addEventListener("click", () => {
   if (state === "over") continueRun();
 });
 
+// Icons sit over the field; their pointerdown must not reach the canvas as a dash.
+ui.muteBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+ui.muteBtn.addEventListener("click", () => {
+  if (!audioOn) return;
+  audio.ensure();
+  audio.toggleMute();
+});
+ui.pauseBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+ui.pauseBtn.addEventListener("click", () => setPaused(!paused));
+// The paused sheet covers the canvas, so a click on it resumes without dashing.
+ui.paused.addEventListener("pointerdown", (e) => {
+  if (e.button === 0) setPaused(false);
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) setPaused(true);
+});
+
+// Fullscreen: the whole document, so the sheets and icons come along. The button's glyph follows
+// the real state, since Escape leaves fullscreen without going through us.
+function toggleFullscreen() {
+  if (!FULLSCREEN_OK) return;
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+}
+ui.fsBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+ui.fsBtn.addEventListener("click", toggleFullscreen);
+document.addEventListener("fullscreenchange", () => {
+  ui.fsBtn.classList.toggle("fs", !!document.fullscreenElement);
+});
+
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   if (audioOn) audio.ensure();
@@ -234,6 +297,10 @@ window.addEventListener("keydown", (e) => {
     continueRun();
   } else if (e.key === "m" || e.key === "M") {
     if (audioOn) audio.toggleMute();
+  } else if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+    setPaused(!paused);
+  } else if (e.key === "f" || e.key === "F") {
+    toggleFullscreen();
   } else if (e.key === " " || e.key === "Enter") {
     e.preventDefault();
     // On the game-over sheet the keys continue the run (same board, score from zero) once the

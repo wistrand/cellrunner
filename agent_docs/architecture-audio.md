@@ -65,7 +65,10 @@ the audio can be removed or swapped without touching `world.js`. `threat(world)`
 - Scheduler: a `setTimeout` loop every `TICK_MS` on the context clock. A bar is rendered and
   scheduled when its start comes within `LOOKAHEAD`, so parameter and layer changes take effect
   at the next bar line. Bars that would start in the past are skipped. A hidden tab halts the
-  loop; it resumes at the next bar if music is still wanted.
+  loop; it resumes at the next bar if music is still wanted. `pauseMusic` halts the loop and
+  fades the song gain but keeps the bar position and the piece; `resumeMusic` continues from
+  that bar. A tab un-hide never resumes a paused piece. `main.js` calls these from the game's
+  pause, so pausing silences the music and resuming picks it up where it stopped.
 - The lead's energy and density are latched at each section start (`leadParams`), since the
   lead renders a phrase per section.
 - Tempo is fixed per run. The threat pulse and the score chime align to the beat grid

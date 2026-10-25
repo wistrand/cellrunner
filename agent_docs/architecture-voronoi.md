@@ -45,6 +45,15 @@ milliseconds for several hundred sites, measured headless.
 Chosen for robustness and size: collinear or cocircular sites, which break naive Delaunay
 builders, are harmless here. The trade is asymptotic cost; see Scaling notes.
 
+The clipper allocates nothing of its own. Two module-level vertex arrays (`POLY_A`, `POLY_B`)
+ping-pong between clips, each carrying its live length as a separate number since stale entries
+past it are left in place, and intersection vertices come from a pool (`vertex`, `VPOOL`) that
+is reset at the start of every cell. `finishCell` copies the survivors into fresh objects, so a
+returned polygon never aliases the scratch and the previous frame's diagram stays valid while
+the next is built. The scratch makes `computeVoronoi` non-re-entrant; nothing calls it
+recursively. Verified bit-identical to the allocating version by a checksum over a 1200-step
+headless run.
+
 ## Adjacency via edge tags
 
 Adjacency falls out of clipping. Every polygon vertex carries `tag`, the identity of the edge
