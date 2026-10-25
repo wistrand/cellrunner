@@ -28,18 +28,21 @@ export const TUNING = {
     { at: 7, spawn: 0.5, speed: 1.0, hunter: 40, wanderer: 60, stalker: 0, splitter: 0, joiner: 0 },
     { at: 8, spawn: 0.5, speed: 1.0, hunter: 40, wanderer: 45, stalker: 15, splitter: 0, joiner: 0 },
     { at: 15, spawn: 0.4, speed: 1.0, hunter: 36, wanderer: 36, stalker: 18, splitter: 10, joiner: 0 },
-    { at: 24, spawn: 0.4, speed: 1.0, hunter: 32, wanderer: 30, stalker: 20, splitter: 10, joiner: 8 },
-    { at: 45, spawn: 0.4, speed: 1.1, hunter: 30, wanderer: 25, stalker: 22, splitter: 12, joiner: 11 },
-    { at: 90, spawn: 0.4, speed: 1.3, hunter: 30, wanderer: 25, stalker: 22, splitter: 12, joiner: 11 },
+    { at: 24, spawn: 0.4, speed: 1.1, hunter: 32, wanderer: 30, stalker: 20, splitter: 10, joiner: 8 },
+    { at: 30, spawn: 0.3, speed: 1.13, hunter: 31, wanderer: 29, stalker: 21, splitter: 11, joiner: 9 },
+    { at: 45, spawn: 0.3, speed: 1.3, hunter: 30, wanderer: 25, stalker: 22, splitter: 12, joiner: 11 },
+    { at: 90, spawn: 0.3, speed: 1.55, hunter: 30, wanderer: 25, stalker: 22, splitter: 12, joiner: 11 },
   ],
   enemiesStart: 2,     // rolled from the table's first row (hunters and wanderers)
   spawnStartMinDist: 4.5, // cells; the start roster spawns at least this far, behind the player
   interceptLead: 2.5,  // cells ahead along the player's path that stalkers aim for
-  enemiesMax: 22,
+  enemiesMax: 16,      // runs should end from speed and pressure, not from a wall of bodies
   catchRadius: 0.12,   // cells
   threatRange: 2.5,    // cells; a lethal enemy this close starts the threat pulse (picture, sound)
   // Goal placement and the growing board.
-  goalDistance: 5,     // cells beyond the reached goal where the next one is placed
+  goalDistance: 5,     // cells beyond the reached goal where the next one is placed, at goal 0
+  goalDistanceGrow: 0.08, // cells added per goal reached (`goalDistanceAt`)
+  goalDistanceMax: 8,  // cells; the leg length stops growing here
   pointsPerCell: 2,    // points a goal pays per cell of graph distance when it was placed
   dashPenalty: 0.5,    // a goal's points are multiplied by this for every dash on the way to it
   goalSpread: 0.6,     // radians; random deviation of the next goal's direction from the path
@@ -350,8 +353,9 @@ export function continueWorld(world) {
   world.actReadyAt = world.time;
   world.distToPlayer = shortestPaths(world.graph, world.player.node);
   for (const en of world.enemies) respawn(world, en);
+  const gd = goalDistanceAt(world);
   placeGoal(world, world.player.x, world.player.y, world.goalX - world.player.x,
-    world.goalY - world.player.y, TUNING.goalDistance, TUNING.goalDistance * 0.9 * world.cell);
+    world.goalY - world.player.y, gd, gd * 0.9 * world.cell);
   startLeg(world);
   world.pathReset = true;
   world.pathStart = null;
@@ -771,6 +775,13 @@ function placeGoal(world, fromX, fromY, dx, dy, distCells, minDist) {
   world.distToGoal = shortestPaths(world.graph, world.goal);
 }
 
+// Legs lengthen with goals reached, from goalDistance by goalDistanceGrow per goal up to
+// goalDistanceMax, so later goals are further and pay more.
+function goalDistanceAt(world) {
+  return Math.min(TUNING.goalDistanceMax,
+    TUNING.goalDistance + TUNING.goalDistanceGrow * world.goals);
+}
+
 // A new leg: the points on offer come from the goal's distance now; dashes on the way halve them.
 function startLeg(world) {
   world.legBase = world.goalPlacedDist / world.cell;
@@ -800,8 +811,8 @@ function scoreGoal(world) {
   const sin = Math.sin(a);
   const rx = dx * cos - dy * sin;
   const ry = dx * sin + dy * cos;
-  placeGoal(world, world.goalX, world.goalY, rx, ry, TUNING.goalDistance,
-    TUNING.goalDistance * 0.9 * world.cell);
+  const gd = goalDistanceAt(world);
+  placeGoal(world, world.goalX, world.goalY, rx, ry, gd, gd * 0.9 * world.cell);
   startLeg(world);
   world.spawnDebt += difficultyAt(world.goals, DIFFICULTY_SCRATCH).spawn;
   while (world.spawnDebt >= 1) {

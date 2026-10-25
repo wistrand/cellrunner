@@ -170,7 +170,9 @@ grows the board to cover it, and takes the nearest interior vertex. If that vert
 goal or closer than `minDist` along the graph from the player, the spot is pushed a cell further
 and retried, because the nearest vertex to a spot can sit well short of it. On a score the
 direction is the path just travelled (goal minus `goalOrigin`, the player position when that goal
-was set) rotated by a random angle within `goalSpread`, at `goalDistance`. On a dash,
+was set) rotated by a random angle within `goalSpread`, at `goalDistanceAt`: `goalDistance`
+plus `goalDistanceGrow` per goal reached, capped at `goalDistanceMax`, so legs lengthen and pay
+more as a run goes on. On a dash,
 `retreatGoal` pushes the goal along the player-to-goal line and requires a real gain in graph
 distance. The push grows with the dashes on the leg: the n-th dash retreats n steps of
 `goalRetreat`, capped at `goalRetreatMaxSteps` steps, so a second and third dash on one leg cost
