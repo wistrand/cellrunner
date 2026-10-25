@@ -141,6 +141,7 @@ export function computeVoronoi(sites, bounds) {
   }
   const maxRing = Math.max(bc, br);
   const cand = [];
+  const candD = new Float64Array(n); // squared distance to the current site, per candidate
 
   const cells = new Array(n);
   for (let i = 0; i < n; i++) {
@@ -179,11 +180,24 @@ export function computeVoronoi(sites, bounds) {
         }
       }
       if (cand.length === 0) continue;
-      // Nearest-first within the ring so the radius shrinks early.
-      cand.sort((a, b) => dist2(sites[a], s) - dist2(sites[b], s));
+      // Nearest-first within the ring so the radius shrinks early. Distances are computed once
+      // into candD (the comparator used to recompute two per comparison, a sixth of a step).
+      for (let m = 0; m < cand.length; m++) candD[cand[m]] = dist2(sites[cand[m]], s);
+      // Insertion sort: a ring holds a dozen or two candidates, where this beats the generic
+      // sort with a comparator callback by a wide margin (it was a tenth of a step).
+      for (let m = 1; m < cand.length; m++) {
+        const j = cand[m];
+        const dj = candD[j];
+        let p = m - 1;
+        while (p >= 0 && candD[cand[p]] > dj) {
+          cand[p + 1] = cand[p];
+          p--;
+        }
+        cand[p + 1] = j;
+      }
       for (const j of cand) {
         const o = sites[j];
-        const d2 = dist2(o, s);
+        const d2 = candD[j];
         // Bisector at distance sqrt(d2)/2 from s; polygon fits inside radius sqrt(r2).
         if (d2 > 4 * r2) continue;
         const nx = o.x - s.x;

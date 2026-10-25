@@ -45,7 +45,9 @@ milliseconds for several hundred sites, measured headless.
 Chosen for robustness and size: collinear or cocircular sites, which break naive Delaunay
 builders, are harmless here. The trade is asymptotic cost; see Scaling notes.
 
-The clipper allocates nothing of its own. Two module-level vertex arrays (`POLY_A`, `POLY_B`)
+Candidates within a ring are ordered nearest first by an insertion sort over squared distances
+computed once per candidate (`candD`); the generic sort with a comparator that recomputed two
+distances per comparison was a sixth of a frame. The clipper allocates nothing of its own. Two module-level vertex arrays (`POLY_A`, `POLY_B`)
 ping-pong between clips, each carrying its live length as a separate number since stale entries
 past it are left in place, and intersection vertices come from a pool (`vertex`, `VPOOL`) that
 is reset at the start of every cell. `finishCell` copies the survivors into fresh objects, so a

@@ -73,12 +73,25 @@ export function createRenderer(canvas) {
     return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
   }
 
+  // Fill strings are cached by their rounded RGB: a few hundred cells a frame otherwise build a
+  // fresh string each, and the set of distinct colours is small.
+  const FILL_CACHE = new Map();
   function cellFill(tone, heat, goal, ply) {
     const ground = mix(COLORS.cell, COLORS.cellB, tone);
     const tinted = mix(mix(ground, COLORS.goalCell, Math.min(1, goal)), COLORS.playerCell,
       Math.min(1, ply));
     const c = mix(tinted, COLORS.hot, Math.min(1, heat));
-    return `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
+    const r = Math.round(c[0]);
+    const g = Math.round(c[1]);
+    const b = Math.round(c[2]);
+    const key = (r << 16) | (g << 8) | b;
+    let s = FILL_CACHE.get(key);
+    if (s === undefined) {
+      s = `rgb(${r},${g},${b})`;
+      if (FILL_CACHE.size > 4096) FILL_CACHE.clear();
+      FILL_CACHE.set(key, s);
+    }
+    return s;
   }
 
   function dot(x, y, r, fill) {

@@ -48,7 +48,10 @@ Four programs, each with one interleaved dynamic buffer and a VAO, built by `pro
 | vignette | one clip-space quad, last                  | pos                                    |
 
 Geometry is rebuilt every frame into `Writer` instances (growable `Float32Array`s that double
-when full and are reused after warm-up), then uploaded with `bufferData(DYNAMIC_DRAW)`. The
+when full and are reused after warm-up), then uploaded with `bufferData(DYNAMIC_DRAW)`. The hot
+builders (`fan`, `quad`, `dot`) call `ensure` and then write into `writer.data` directly; the
+generic `push(...vals)` allocates an argument array per call and is kept only for the rare
+paths. The
 diagram changes every frame anyway, so there is nothing to cache.
 
 - **Cells** fan from the centroid. The centre vertex carries the polygon's inradius as its edge

@@ -155,8 +155,12 @@ if (!QUICK) {
   const a = createWorld(31337, 1000, 700);
   for (let i = 0; i < (QUICK ? 200 : 400); i++) stepWorld(a, 1 / 60, { act: i % 90 === 0 });
   const json = serializeWorld(a);
-  check(typeof json === "string" && json.length > 0 && !json.includes("null,"),
-    "save: a JSON string with no Infinity turned into null");
+  check(typeof json === "string" && json.length > 0, "save: a JSON string");
+  // JSON turns Infinity into null; the save must not (sentinel strings). Fields that are null in
+  // the live world (camGoal while the camera holds, pathStart) are allowed to be null.
+  const raw = JSON.parse(json);
+  const nulled = Object.keys(raw).filter((k) => raw[k] === null && typeof a[k] === "number");
+  check(nulled.length === 0, `save: no number turned into null (${nulled.join(", ")})`);
   const b = restoreWorld(json);
   check(b.seed === a.seed && b.time === a.time && b.score === a.score && b.goals === a.goals &&
     b.sites.length === a.sites.length && b.enemies.length === a.enemies.length,

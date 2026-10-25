@@ -1455,31 +1455,62 @@ function moveSites(world, dt) {
 // Hard separation: no two sites closer than sepHard. Splits and dense grid cells can place sites
 // nearer than twice the drift cap, so the cap alone does not guarantee this. One symmetric push
 // per pair per frame; the n^2 scan is cheap at this site count.
+// Scratch for separateSites: site indices sorted by x, and the candidate pairs packed as i * n + j.
+const SEP_ORDER = [];
+const SEP_PAIRS = [];
+
+// Pairs closer than sepHard are pushed apart symmetrically, in (i, j) index order. The pairs
+// come from a sweep over the sites sorted by x (only pairs within 2 * sepHard in x are looked
+// at, a slack that covers the small moves earlier pairs can make), so the cost is near linear
+// instead of every pair; the resolution order and the exact distance check are the plain
+// double loop's, so the result is the same except when three or more sites overlap at once.
 function separateSites(world) {
   const { sites, cell } = world;
   const min = TUNING.sepHard * cell;
   const min2 = min * min;
-  for (let i = 0; i < sites.length; i++) {
-    const a = sites[i];
-    for (let j = i + 1; j < sites.length; j++) {
-      const b = sites[j];
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 >= min2) continue;
-      let ux = 1;
-      let uy = 0; // coincident: separate along a fixed axis so the result is deterministic
-      if (d2 > 0) {
-        const d = Math.sqrt(d2);
-        ux = dx / d;
-        uy = dy / d;
-      }
-      const push = (min - Math.sqrt(d2)) * 0.5;
-      a.x -= ux * push;
-      a.y -= uy * push;
-      b.x += ux * push;
-      b.y += uy * push;
+  const n = sites.length;
+  if (SEP_ORDER.length !== n) {
+    SEP_ORDER.length = n;
+    for (let i = 0; i < n; i++) SEP_ORDER[i] = i;
+  }
+  SEP_ORDER.sort((p, q) => sites[p].x - sites[q].x);
+  SEP_PAIRS.length = 0;
+  const slack = 2 * min;
+  const slack2 = slack * slack;
+  for (let a = 0; a < n; a++) {
+    const i = SEP_ORDER[a];
+    const si = sites[i];
+    for (let b = a + 1; b < n; b++) {
+      const j = SEP_ORDER[b];
+      const sj = sites[j];
+      const dx = sj.x - si.x;
+      if (dx >= slack) break;
+      const dy = sj.y - si.y;
+      if (dx * dx + dy * dy < slack2) SEP_PAIRS.push(i < j ? i * n + j : j * n + i);
     }
+  }
+  if (SEP_PAIRS.length === 0) return;
+  SEP_PAIRS.sort((p, q) => p - q);
+  for (const key of SEP_PAIRS) {
+    const i = Math.floor(key / n);
+    const a = sites[i];
+    const b = sites[key - i * n];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 >= min2) continue;
+    let ux = 1;
+    let uy = 0; // coincident: separate along a fixed axis so the result is deterministic
+    if (d2 > 0) {
+      const d = Math.sqrt(d2);
+      ux = dx / d;
+      uy = dy / d;
+    }
+    const push = (min - Math.sqrt(d2)) * 0.5;
+    a.x -= ux * push;
+    a.y -= uy * push;
+    b.x += ux * push;
+    b.y += uy * push;
   }
 }
 

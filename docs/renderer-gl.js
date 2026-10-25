@@ -449,16 +449,25 @@ export function createRendererGL(canvas) {
     return m;
   }
 
+  // Written straight into the buffer: the generic `push(...vals)` allocates an argument array
+  // per call, and this runs once per polygon edge per frame.
   function fan(poly, cx, cy, heat, goal, ply, tone, biome, space) {
     const r = inradius(poly, cx, cy);
-    cellW.ensure(poly.length * 33);
-    for (let i = 0; i < poly.length; i++) {
+    const m = poly.length;
+    cellW.ensure(m * 33);
+    const d = cellW.data;
+    let n = cellW.n;
+    for (let i = 0; i < m; i++) {
       const a = poly[i];
-      const b = poly[(i + 1) % poly.length];
-      cellW.push(cx, cy, r, heat, goal, ply, tone, biome, space, cx, cy,
-        a.x, a.y, 0, heat, goal, ply, tone, biome, space, cx, cy,
-        b.x, b.y, 0, heat, goal, ply, tone, biome, space, cx, cy);
+      const b = poly[i + 1 === m ? 0 : i + 1];
+      d[n++] = cx; d[n++] = cy; d[n++] = r; d[n++] = heat; d[n++] = goal; d[n++] = ply;
+      d[n++] = tone; d[n++] = biome; d[n++] = space; d[n++] = cx; d[n++] = cy;
+      d[n++] = a.x; d[n++] = a.y; d[n++] = 0; d[n++] = heat; d[n++] = goal; d[n++] = ply;
+      d[n++] = tone; d[n++] = biome; d[n++] = space; d[n++] = cx; d[n++] = cy;
+      d[n++] = b.x; d[n++] = b.y; d[n++] = 0; d[n++] = heat; d[n++] = goal; d[n++] = ply;
+      d[n++] = tone; d[n++] = biome; d[n++] = space; d[n++] = cx; d[n++] = cy;
     }
+    cellW.n = n;
   }
 
   // The tone of an edge: the mean of its one or two cells' tones.
@@ -477,10 +486,21 @@ export function createRendererGL(canvas) {
     nx = nx / len * halfWidth;
     ny = ny / len * halfWidth;
     w.ensure(36);
-    w.push(ax + nx, ay + ny, c[0], c[1], c[2], c[3], bx + nx, by + ny, c[0], c[1], c[2], c[3],
-      bx - nx, by - ny, c[0], c[1], c[2], c[3]);
-    w.push(ax + nx, ay + ny, c[0], c[1], c[2], c[3], bx - nx, by - ny, c[0], c[1], c[2], c[3],
-      ax - nx, ay - ny, c[0], c[1], c[2], c[3]);
+    // Six vertices written straight into the buffer (no closure, no argument arrays): a+n, b+n,
+    // b-n, then a+n, b-n, a-n.
+    const d = w.data;
+    let n = w.n;
+    const r = c[0];
+    const g = c[1];
+    const b = c[2];
+    const a = c[3];
+    d[n++] = ax + nx; d[n++] = ay + ny; d[n++] = r; d[n++] = g; d[n++] = b; d[n++] = a;
+    d[n++] = bx + nx; d[n++] = by + ny; d[n++] = r; d[n++] = g; d[n++] = b; d[n++] = a;
+    d[n++] = bx - nx; d[n++] = by - ny; d[n++] = r; d[n++] = g; d[n++] = b; d[n++] = a;
+    d[n++] = ax + nx; d[n++] = ay + ny; d[n++] = r; d[n++] = g; d[n++] = b; d[n++] = a;
+    d[n++] = bx - nx; d[n++] = by - ny; d[n++] = r; d[n++] = g; d[n++] = b; d[n++] = a;
+    d[n++] = ax - nx; d[n++] = ay - ny; d[n++] = r; d[n++] = g; d[n++] = b; d[n++] = a;
+    w.n = n;
   }
 
   function tri(w, ax, ay, bx, by, cx, cy, c) {
@@ -536,12 +556,28 @@ export function createRendererGL(canvas) {
     return out;
   }
 
+  // One quad as two triangles, written straight into the buffer (no closure, no argument
+  // arrays): corners (-1,-1) (1,-1) (1,1) then (-1,-1) (1,1) (-1,1) in uv.
   function dot(x, y, r, c, ring = 0) {
     const soft = Math.min(0.5, 1.5 / (r * cam.scale));
     dotW.ensure(60);
-    const v = (ux, uy) => dotW.push(x + ux * r, y + uy * r, ux, uy, c[0], c[1], c[2], c[3], ring, soft);
-    v(-1, -1); v(1, -1); v(1, 1);
-    v(-1, -1); v(1, 1); v(-1, 1);
+    const d = dotW.data;
+    let n = dotW.n;
+    const cr = c[0];
+    const cg = c[1];
+    const cb = c[2];
+    const ca = c[3];
+    const x0 = x - r;
+    const x1 = x + r;
+    const y0 = y - r;
+    const y1 = y + r;
+    d[n++] = x0; d[n++] = y0; d[n++] = -1; d[n++] = -1; d[n++] = cr; d[n++] = cg; d[n++] = cb; d[n++] = ca; d[n++] = ring; d[n++] = soft;
+    d[n++] = x1; d[n++] = y0; d[n++] = 1; d[n++] = -1; d[n++] = cr; d[n++] = cg; d[n++] = cb; d[n++] = ca; d[n++] = ring; d[n++] = soft;
+    d[n++] = x1; d[n++] = y1; d[n++] = 1; d[n++] = 1; d[n++] = cr; d[n++] = cg; d[n++] = cb; d[n++] = ca; d[n++] = ring; d[n++] = soft;
+    d[n++] = x0; d[n++] = y0; d[n++] = -1; d[n++] = -1; d[n++] = cr; d[n++] = cg; d[n++] = cb; d[n++] = ca; d[n++] = ring; d[n++] = soft;
+    d[n++] = x1; d[n++] = y1; d[n++] = 1; d[n++] = 1; d[n++] = cr; d[n++] = cg; d[n++] = cb; d[n++] = ca; d[n++] = ring; d[n++] = soft;
+    d[n++] = x0; d[n++] = y1; d[n++] = -1; d[n++] = 1; d[n++] = cr; d[n++] = cg; d[n++] = cb; d[n++] = ca; d[n++] = ring; d[n++] = soft;
+    dotW.n = n;
   }
 
   function draw(world) {

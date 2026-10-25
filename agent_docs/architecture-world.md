@@ -279,7 +279,9 @@ single-frame change nobody notices. `editCount` counts edits for tests.
 Each site feels a spring toward its home, viscous damping, a repulsion from every lethal enemy
 within `pushRadius`, and, while the player is airborne, an attraction toward the player within
 `pullRadius`. All falloffs are linear in distance. After integration the offset from home is
-clamped to `maxOffset`, then `separateSites` pushes any pair closer than `sepHard` apart
+clamped to `maxOffset`, then `separateSites` pushes any pair closer than `sepHard` apart (the
+candidate pairs come from a sweep over the sites sorted by x and are resolved in index order, so
+the cost is near linear and the result matches the plain double loop)
 symmetrically, so sites never meet regardless of how they got close (splits and dense grid cells
 place sites nearer than twice the drift cap). The position is clamped to the box last, so a
 separation push never leaves a site outside; at the box edge the clamp wins over `sepHard`.
