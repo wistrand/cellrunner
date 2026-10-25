@@ -140,9 +140,10 @@ function showGameOver() {
   show(ui.iconsLeft, false);
 }
 
-// Pause: the world is drawn but not stepped, the music plays on without threat, and the sheet
-// over the field takes the resume click so it never registers as a dash. Only during play; a
-// hidden tab pauses too, since a long gap would otherwise land as one clamped step.
+// Pause: the world is drawn but not stepped, the music is held at its bar and the threat pulse
+// released, and the sheet over the field takes the resume click so it never registers as a
+// dash. Only during play; a hidden tab pauses too, since a long gap would otherwise land as one
+// clamped step.
 function setPaused(on) {
   if (state !== "play" || world.dead || paused === on) return;
   paused = on;
@@ -258,15 +259,21 @@ ui.continueBtn.addEventListener("click", () => {
   if (state === "over") continueRun();
 });
 
-// Icons sit over the field; their pointerdown must not reach the canvas as a dash.
+// Icons sit over the field; their pointerdown must not reach the canvas as a dash. A clicked
+// button keeps keyboard focus in some browsers, where Space or Enter would then click it again
+// on top of their game meaning, so every icon drops focus after acting.
 ui.muteBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-ui.muteBtn.addEventListener("click", () => {
+ui.muteBtn.addEventListener("click", (e) => {
+  e.currentTarget.blur();
   if (!audioOn) return;
   audio.ensure();
   audio.toggleMute();
 });
 ui.pauseBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-ui.pauseBtn.addEventListener("click", () => setPaused(!paused));
+ui.pauseBtn.addEventListener("click", (e) => {
+  e.currentTarget.blur();
+  setPaused(!paused);
+});
 // The paused sheet covers the canvas, so a click on it resumes without dashing.
 ui.paused.addEventListener("pointerdown", (e) => {
   if (e.button === 0) setPaused(false);
@@ -283,7 +290,10 @@ function toggleFullscreen() {
   else document.documentElement.requestFullscreen().catch(() => {});
 }
 ui.fsBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
-ui.fsBtn.addEventListener("click", toggleFullscreen);
+ui.fsBtn.addEventListener("click", (e) => {
+  e.currentTarget.blur();
+  toggleFullscreen();
+});
 document.addEventListener("fullscreenchange", () => {
   ui.fsBtn.classList.toggle("fs", !!document.fullscreenElement);
 });
@@ -297,7 +307,9 @@ window.addEventListener("keydown", (e) => {
     continueRun();
   } else if (e.key === "m" || e.key === "M") {
     if (audioOn) audio.toggleMute();
-  } else if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+  } else if (e.key === "p" || e.key === "P") {
+    // Not Escape: the browser uses it to leave fullscreen, and whether the page still sees that
+    // keydown differs by browser, so it would pause only sometimes.
     setPaused(!paused);
   } else if (e.key === "f" || e.key === "F") {
     toggleFullscreen();

@@ -31,6 +31,7 @@ export function buildGraph(diagram) {
     const i = cells[c].id;
     const poly = cells[c].polygon;
     const n = poly.length;
+    if (n === 0) continue; // a degenerate cell has no vertices to register
     // Walking the polygon, vertex k's in-edge is vertex k-1's out-edge and the far end of its
     // out-edge is vertex k+1's node, so each key is built once and carried to the next step.
     let inKey = edgeKey(i, poly[n - 1].tag);

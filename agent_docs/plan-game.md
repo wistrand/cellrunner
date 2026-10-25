@@ -54,6 +54,11 @@ goal, death on contact. Large areas differ by a broad tone field (cell size, col
 - `npm test` for anything in `voronoi.js`, `graph.js`, `world.js` (the user runs it). The world
   test is a headless smoke and determinism check, not a rules test.
 - Visual checks in the browser with a fixed `?seed=`.
+- `node scripts/difficulty.js [cap] [seeds] [policy]` for difficulty: scripted players (passive,
+  reactive, cautious) run whole games headless and the script reports survival, goals, score,
+  enemy count and pace per goal band. Run seeds in parallel processes with `SEED_FROM` for long
+  caps. Any tuning change to `spawnTable`, speeds, goal distance or the retreat should be
+  re-measured with it; the numbers in Phase 3 come from it.
 - Add targeted rule tests to `scripts/world-test.js` as rules stabilise (dash window, cooldown,
   goal scoring).
 
@@ -91,7 +96,10 @@ under budget on a mid-range phone.
       follow-up if cell size alone does not read.
 - [x] Difficulty curve beyond "one more enemy per goal": `spawnTable` by goals reached sets the
       enemy mix, the spawn rate per goal and the enemy speed; new kinds debut at fixed goals.
-      Tuned slow: headless, a perfect reactive player lasts about a minute.
+      Tuned 2026-10-25 with a headless sweep: a reactive player (dash when a killer is within
+      0.55 cells) lasts a median 143 s and 31 goals over five seeds, 60 s on the hardest seed,
+      208 s on the easiest; a passive player lasts about 30 s. Pace climbs from 3.6 s per goal
+      at the start to over 7 s past goal 30.
 - [x] Procedural audio (astrocatch's `audio.js` is a reference, not a dependency); see
       [architecture-audio.md](architecture-audio.md). A phone listening pass is still open.
 

@@ -1,7 +1,7 @@
 // Browser-only ES module: Canvas2D renderer. Owns the canvas, DPR scaling and all drawing. It
 // reads the world object produced by world.js and knows nothing about rules.
 
-import { isAirborne, airProgress, isLethal, TUNING } from "./world.js";
+import { isAirborne, airProgress, isLethal, pathReveal, TUNING } from "./world.js";
 
 const COLORS = {
   bg: "#0b0d14",
@@ -142,15 +142,20 @@ export function createRenderer(canvas) {
     // The smoothed path, player first, fading toward the goal.
     ctx.lineWidth = 3 * px;
     ctx.lineCap = "round";
+    // A new leg's route grows from the player: `pathReveal` says how many segments to draw, the
+    // last of them cut short.
     const path = world.path;
     const segs = path.length / 2 - 1;
     const [rr, rg, rb, ra] = COLORS.route;
-    for (let i = 0; i < segs; i++) {
+    const shown = pathReveal(world) * segs;
+    for (let i = 0; i < segs && i < shown; i++) {
       const alpha = ra * (1 - 0.7 * i / Math.max(1, segs - 1));
+      const k = Math.min(1, shown - i);
       ctx.strokeStyle = `rgba(${rr},${rg},${rb},${alpha.toFixed(3)})`;
       ctx.beginPath();
       ctx.moveTo(path[2 * i], path[2 * i + 1]);
-      ctx.lineTo(path[2 * i + 2], path[2 * i + 3]);
+      ctx.lineTo(path[2 * i] + (path[2 * i + 2] - path[2 * i]) * k,
+        path[2 * i + 1] + (path[2 * i + 3] - path[2 * i + 1]) * k);
       ctx.stroke();
     }
 

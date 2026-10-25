@@ -2,15 +2,18 @@
 // in most browsers (CORS), so `npm start` runs this on http://localhost:8002/ instead.
 
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
-import { extname, join, resolve, dirname } from "node:path";
+import { readFile, realpath } from "node:fs/promises";
+import { extname, join, resolve, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PORT = 8002;
+const PORT = Number(process.env.PORT) || 8002;
 // Anchor the served root to ../docs relative to this script file, so the server works whether you
 // run it from the repo root, from scripts/, or via `npm start`.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../docs");
+// Inside the root means the root itself or a path below it. A plain prefix test is not enough:
+// "../docs-other/x" starts with the root's text and is still outside.
+const inside = (p) => p === ROOT || p.startsWith(ROOT + sep);
 
 const TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -27,17 +30,38 @@ const TYPES = {
 
 createServer(async (req, res) => {
   try {
-    let url = req.url.split("?")[0];
+    // Decode first, so "%2e%2e" is seen as ".." by the checks below; reject what cannot be a
+    // file name.
+    let url;
+    try {
+      url = decodeURIComponent(req.url.split("?")[0]);
+    } catch {
+      res.writeHead(400);
+      res.end("Bad request");
+      return;
+    }
+    if (url.includes("\0")) {
+      res.writeHead(400);
+      res.end("Bad request");
+      return;
+    }
     if (url === "/" || url === "") url = "/index.html";
+    // Traversal: join normalises "..", then the result must lie inside the root, and so must the
+    // real path after following any symlink.
     const path = join(ROOT, url);
-    // Defend against directory traversal.
-    if (!path.startsWith(ROOT)) {
+    if (!inside(path)) {
       res.writeHead(403);
       res.end("Forbidden");
       return;
     }
-    const data = await readFile(path);
-    const type = TYPES[extname(path).toLowerCase()] || "application/octet-stream";
+    const real = await realpath(path);
+    if (!inside(real)) {
+      res.writeHead(403);
+      res.end("Forbidden");
+      return;
+    }
+    const data = await readFile(real);
+    const type = TYPES[extname(real).toLowerCase()] || "application/octet-stream";
     res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
     res.end(data);
   } catch (err) {

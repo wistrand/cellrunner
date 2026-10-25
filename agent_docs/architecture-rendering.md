@@ -70,7 +70,10 @@ diagram changes every frame anyway, so there is nothing to cache.
   to enemies, see the world doc) is drawn instead in `edgeDead`, a pale tint at a fixed width,
   in both renderers, so the safe lanes can be read. The player's path
   (`world.path`, player first) gets a second batch: a wide faint halo under a bright core, both
-  fading toward the goal so the path stays readable over glowing cells. A third flat batch
+  fading toward the goal so the path stays readable over glowing cells. Only the first
+  `pathReveal(world)` fraction of its segments is drawn, the last cut short, so a new leg's
+  route grows out from the player over `TUNING.pathReveal` seconds; the 2D renderer does the
+  same. A third flat batch
   (`playerMarks`) draws the player's trail from `world.trail`, oldest first, thin and faint to
   wide and brighter, ending at the player, and a heading chevron a fifth of a cell ahead of the
   player toward the second path sample. Both follow the lifted player while airborne. They exist

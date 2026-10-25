@@ -27,6 +27,7 @@ scripts/
   world-test.js    # headless smoke + determinism test for world.js
   music-test.js    # node checks for music.js (scale, voice leading, windows, fingerprint)
   events-test.js   # node checks for audio-events.js on scripted worlds
+  difficulty.js    # headless difficulty sweep with scripted players (not part of npm test)
   serve.js         # dependency-free static server, serves docs/
 agent_docs/        # per-subsystem deep dives, linked below
 package.json       # "type": "module" + start and test scripts

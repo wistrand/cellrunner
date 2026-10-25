@@ -25,8 +25,8 @@ No install, no build, no dependencies. Plain ES modules and a Canvas2D renderer.
   and the enemy mix and start the score from zero; a click restarts. `?seed=N` in the URL reproduces a field.
 - **M** or the speaker icon mutes and unmutes. The music is composed from the seed, so a seed
   also reproduces the tune. `?audio=0` keeps sound off entirely.
-- **P**, Escape or the pause icon pauses the game and the music; P, Space or a click resumes. A
-  hidden tab pauses too.
+- **P** or the pause icon pauses the game and the music; P, Space or a click resumes. A hidden
+  tab pauses too.
 - **F** or the corner icon toggles fullscreen, where the browser allows it.
 
 Red enemies hunt you along the shortest path. Pink ones wander. Lime ones cut you off by heading

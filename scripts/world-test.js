@@ -87,7 +87,9 @@ run(11, 390, 800, 600);
 // its invariants when stepped on.
 {
   const w = createWorld(99, 900, 700);
-  for (let i = 0; i < 6000 && !w.dead; i++) stepWorld(w, 1 / 60, { act: i % 75 === 0 });
+  // A dash every four seconds: often enough to exercise dashes, rare enough that the player is
+  // on the ground most of the time and the roster of two can catch it within the budget.
+  for (let i = 0; i < 6000 && !w.dead; i++) stepWorld(w, 1 / 60, { act: i % 240 === 0 });
   if (w.dead) {
     const goals = w.goals;
     const n = w.enemies.length;

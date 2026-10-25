@@ -56,6 +56,7 @@ export const TUNING = {
                        // (which is straight-line) so a winding path to any live enemy fits.
   spawnMaxDist: 5.5,   // cells; straight-line cap on spawn distance (stays inside the leash)
   pathSamples: 32,     // points in the player's smoothed path
+  pathReveal: 0.45,    // s; a new leg's route is drawn growing from the player over this long
   pathFollow: 6,       // 1 / s; how fast the smoothed path converges on the routed one
   pathStartRadius: 0.35, // cells; endpoints of edges this close to the player can start the path
   pathStartStick: 0.35, // cells; the current start vertex is kept unless another beats it by this
@@ -268,6 +269,7 @@ export function createWorld(seed, width, height) {
     goalOriginX: 0,      // player position when the current goal was set; gives the path direction
     goalOriginY: 0,
     goalMovedAt: -Infinity,
+    legRevealAt: -Infinity, // when the current leg began; the renderers grow the route from then
     goalPlacedDist: 0,   // graph distance (world units) from the player when the goal was placed
     legBase: 0,          // cells; the current goal's distance when it was set (before retreats)
     legDashes: 0,        // dashes since the current goal was set
@@ -314,7 +316,9 @@ export function createWorld(seed, width, height) {
   world.camera = cameraTarget(world);
   ensureRegion(world, world.goalX, world.goalY);
   updatePath(world, 0);
-  for (let i = 0; i < TUNING.enemiesStart; i++) spawnEnemy(world, rollKind(world), true);
+  // spawnKind, not rollKind: each kind the first row turns on appears once before any roll, so
+  // a two-enemy roster is always one hunter and one wanderer rather than a 36% chance of none.
+  for (let i = 0; i < TUNING.enemiesStart; i++) spawnEnemy(world, spawnKind(world), true);
   finishStep(world);
   return world;
 }
@@ -359,6 +363,7 @@ export function continueWorld(world) {
   placeGoal(world, world.player.x, world.player.y, world.goalX - world.player.x,
     world.goalY - world.player.y, gd, gd * 0.9 * world.cell);
   startLeg(world);
+  world.legRevealAt = world.time;
   world.pathReset = true;
   world.pathStart = null;
   resetTrail(world);
@@ -397,6 +402,12 @@ export function isAirborne(world) {
 export function airProgress(world) {
   const span = world.airUntil - world.airStart;
   return span > 0 ? Math.min(1, (world.time - world.airStart) / span) : 1;
+}
+
+// How much of the route the renderers should draw, 0..1 from the player outward: a new leg's
+// route grows over pathReveal seconds instead of appearing whole on the frame the goal moved.
+export function pathReveal(world) {
+  return Math.min(1, (world.time - world.legRevealAt) / TUNING.pathReveal);
 }
 
 export function isActReady(world) {
@@ -816,6 +827,7 @@ function scoreGoal(world) {
   const gd = goalDistanceAt(world);
   placeGoal(world, world.goalX, world.goalY, rx, ry, gd, gd * 0.9 * world.cell);
   startLeg(world);
+  world.legRevealAt = world.time;
   world.spawnDebt += difficultyAt(world.goals, DIFFICULTY_SCRATCH).spawn;
   while (world.spawnDebt >= 1) {
     world.spawnDebt -= 1;

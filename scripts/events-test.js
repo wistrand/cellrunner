@@ -1,7 +1,10 @@
 // Node test runner for docs/audio-events.js. Run via `npm test`. Scripted worlds: fixed seeds and
-// a dash every 50 steps, stepped until death or 90 s. Board modifiers debut late in the spawn
+// a dash every 120 steps, stepped until death or 90 s. Board modifiers debut late in the spawn
 // table and the scripted player dies early, so two of the start enemies are turned into a
 // splitter and a joiner (plain fields on the entity) to exercise the split and join events.
+// The start roster is raised to four for these worlds so two lethal enemies remain after that,
+// and the dash interval leaves the player on the ground most of the time; the game's own
+// roster of two with a dash every 50 steps (airborne 84% of the time) never produced a death.
 
 import { createWorld, stepWorld, threat, TUNING } from "../docs/world.js";
 import { createEventTracker, diffWorld, panOf, musicParams } from "../docs/audio-events.js";
@@ -17,6 +20,7 @@ function check(cond, msg) {
 const SEEDS = [1, 7, 12345, 424242];
 const DT = 1 / 60;
 const STEPS = 60 * 90;
+TUNING.enemiesStart = 4; // see the header; the test owns TUNING for its process
 
 function run(seed) {
   const world = createWorld(seed, 1280, 800);
@@ -34,7 +38,7 @@ function run(seed) {
   let prevHeat = 0;
   const mp = musicParams(tr);
   for (let i = 0; i < STEPS && !world.dead; i++) {
-    const act = i % 50 === 0;
+    const act = i % 120 === 0;
     const airStart = world.airStart;
     stepWorld(world, DT, { act });
     const evs = diffWorld(tr, world);

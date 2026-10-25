@@ -119,7 +119,10 @@ chosen among endpoints of edges within `pathStartRadius` of the player (so the f
 along an edge, never across a cell) by straight-line distance plus graph distance, with
 `pathStartStick` hysteresis so it does not flip as the player moves. The route is resampled to
 `pathSamples` points by arc length into `pathTarget`; `world.path` eases toward it point by point
-at `pathFollow`, except on `pathReset` (after a score) when it is copied. `movePlayer` walks the
+at `pathFollow`, except on `pathReset` (after a score) when it is copied. A score and a continue
+also set `legRevealAt`, and `pathReveal` (0..1 over `pathReveal` seconds) tells the renderers
+how much of the route to draw from the player outward, so a new leg's route grows into place
+instead of appearing whole; the simulation itself follows the full path. `movePlayer` walks the
 player along `world.path` and re-bases the path on the new position. The eased path cuts corners
 during transitions by design; the player follows it off-edge. Reaching within a fraction of a cell
 of the goal scores. `sampleTrail` records the player's position every `trailInterval` into
@@ -139,8 +142,9 @@ the last. `spawn` is enemies per goal (`spawnDebt` accumulates fractions, so 0.5
 other goal; the table starts there and eases to 0.4), `speed` multiplies `enemySpeed` (`difficultyAt`), and the kind columns are spawn
 weights (`spawnWeightsAt`): a kind stays at zero until the first row that gives it weight, and
 `spawnKind` makes a kind's first spawn after its weight turns on that kind, so stalkers,
-splitters and joiners debut at known goals. The start roster (`enemiesStart`) is rolled from the
-first row, so only hunters and wanderers, and spawns behind the player at
+splitters and joiners debut at known goals. The start roster (`enemiesStart`) comes from
+`spawnKind` at goal 0, so each kind the first row turns on appears once before any roll
+(two enemies means one hunter and one wanderer), and spawns behind the player at
 `spawnStartMinDist` (`spawnNode` with `opening`), since enemies ahead at 3 cells met a player
 running at them within a second. Hunters, stalkers and wanderers are lethal
 (`isLethal`); only they raise heat, drive the renderer's threat pulse, push sites or trigger

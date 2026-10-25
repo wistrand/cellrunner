@@ -6,7 +6,7 @@
 // GLSL lives in template strings. Never put a backtick inside a shader comment; it terminates the
 // template literal.
 
-import { isAirborne, airProgress, isLethal, threat, TUNING } from "./world.js";
+import { isAirborne, airProgress, isLethal, pathReveal, threat, TUNING } from "./world.js";
 
 const COLORS = {
   bg: [0.043, 0.051, 0.078, 1],
@@ -530,16 +530,22 @@ export function createRendererGL(canvas) {
     }
     // The smoothed path, player first, fading toward the goal. A wide faint halo under a bright
     // core keeps it readable over glowing cells.
+    // A new leg's route grows from the player: `pathReveal` says how many segments to draw, the
+    // last of them cut short.
     const path = world.path;
     const segs = path.length / 2 - 1;
     const rc = [COLORS.route[0], COLORS.route[1], COLORS.route[2], 0];
     const hc = [COLORS.routeHalo[0], COLORS.routeHalo[1], COLORS.routeHalo[2], 0];
-    for (let i = 0; i < segs; i++) {
+    const shown = pathReveal(world) * segs;
+    for (let i = 0; i < segs && i < shown; i++) {
       const fade = 1 - 0.7 * i / Math.max(1, segs - 1);
       hc[3] = COLORS.routeHalo[3] * fade;
       rc[3] = COLORS.route[3] * fade;
-      quad(routeW, path[2 * i], path[2 * i + 1], path[2 * i + 2], path[2 * i + 3], 5 * px, hc);
-      quad(routeW, path[2 * i], path[2 * i + 1], path[2 * i + 2], path[2 * i + 3], 1.8 * px, rc);
+      const k = Math.min(1, shown - i);
+      const ex = path[2 * i] + (path[2 * i + 2] - path[2 * i]) * k;
+      const ey = path[2 * i + 1] + (path[2 * i + 3] - path[2 * i + 1]) * k;
+      quad(routeW, path[2 * i], path[2 * i + 1], ex, ey, 5 * px, hc);
+      quad(routeW, path[2 * i], path[2 * i + 1], ex, ey, 1.8 * px, rc);
     }
     drawProgram(flat, edgeW);
     drawProgram(flat, routeW);
