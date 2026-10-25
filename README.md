@@ -2,6 +2,9 @@
 
 Play it at [cellrunner.live](https://cellrunner.live).
 
+![A run in progress: the route climbs from snow toward the gold marker in the trees, past a
+river of tiny cells, with enemies warming the cells around them](docs/screenshot.png)
+
 A browser game on a living Voronoi mesh. You follow a route toward a gold marker; the game picks
 the route and smooths it as the mesh shifts. Enemies run the cell edges. Where they crowd, the
 cells bulge and the paths stretch. Each marker you reach places the next one further on, the board
@@ -48,6 +51,17 @@ ES modules can't be loaded from `file://`, so a tiny static server is bundled:
 npm start          # http://localhost:8002/
 npm test           # quick headless checks for the geometry and simulation modules
 npm run test:full  # the same with full step budgets (minutes)
+```
+
+`?start=1` skips the start sheet, `&skip=S` steps the world S seconds before the first frame
+(with a scripted dash every four seconds) and `&fixeddt=1` makes every frame a sixtieth. That is
+how the screenshot above is taken, since headless Chrome paints only a frame or two: run the
+server, then
+
+```sh
+google-chrome-stable --headless=new --hide-scrollbars --use-angle=swiftshader \
+  --enable-unsafe-swiftshader --window-size=1280,800 --virtual-time-budget=8000 \
+  --screenshot=shot.png "http://localhost:8002/?seed=12345&start=1&skip=25&fixeddt=1"
 ```
 
 Requires Node 18 or newer. Nothing to `npm install`.

@@ -11,6 +11,7 @@ first, then the relevant file in `agent_docs/`.
 docs/
   index.html       # tiny shell: DOM + CSS + one <script type="module">
   CNAME            # GitHub Pages custom domain: cellrunner.live
+  screenshot.png   # README image; retake with headless Chrome, ?seed=12345&start=1&skip=25&fixeddt=1
   main.js          # browser-only: input, RAF loop, HUD, best score, renderer selection
   renderer-gl.js   # browser-only: WebGL2 renderer (default)
   renderer.js      # browser-only: Canvas2D renderer (fallback, or ?gl=0)

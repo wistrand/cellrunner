@@ -212,8 +212,12 @@ function updateHud(now) {
   if (audioOn) ui.muteBtn.classList.toggle("muted", audio.isMuted());
 }
 
+// ?fixeddt=1 steps exactly one sixtieth per frame regardless of the clock: for headless
+// screenshots, where virtual time runs in jumps and the real dt would be the clamp every frame.
+const FIXED_DT = params.get("fixeddt") === "1";
+
 function frame(now) {
-  const dt = Math.min(MAX_DT, (now - lastFrame) / 1000);
+  const dt = FIXED_DT ? 1 / 60 : Math.min(MAX_DT, (now - lastFrame) / 1000);
   lastFrame = now;
   if (state === "start") {
     // The welcome sheet sits over a still field: drawn, not stepped.
@@ -271,7 +275,6 @@ canvas.addEventListener("pointerdown", (e) => {
   if (audioOn) audio.ensure();
   act(performance.now());
 });
-canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 // The game-over sheet: a click anywhere on it restarts once the delay has passed, so RESTART has
 // no handler of its own (the pointerdown bubbling from it is the click, and a second handler
@@ -402,5 +405,17 @@ window.addEventListener("resize", () => {
 });
 
 newGame(params.has("seed") ? Number(params.get("seed")) >>> 0 : randomSeed());
-showStart();
+// ?start=1 skips the start sheet (screenshots, quick checks); audio still waits for a gesture.
+// ?skip=S then steps the world S seconds before the first frame, with a scripted dash every
+// four seconds, so a headless capture shows a run in progress (headless Chrome paints only a
+// frame or two however long its virtual-time budget is).
+if (params.get("start") === "1") {
+  startRun(seed);
+  const skip = Math.min(120, Math.max(0, Number(params.get("skip")) || 0));
+  for (let i = 0; i < skip * 60 && !world.dead; i++) {
+    stepWorld(world, 1 / 60, { act: i % 240 === 120 });
+  }
+} else {
+  showStart();
+}
 requestAnimationFrame(frame);
