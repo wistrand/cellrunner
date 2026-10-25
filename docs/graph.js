@@ -7,9 +7,13 @@
 // the same features until a topological flip removes them, which lets entities stay attached to
 // "their" edge across a rebuild.
 
+// Sorted without allocating: three compare-and-swaps, hot in buildGraph.
 export function nodeKey(a, b, c) {
-  const arr = [a, b, c].sort((p, q) => p - q);
-  return arr[0] + "," + arr[1] + "," + arr[2];
+  let t;
+  if (a > b) { t = a; a = b; b = t; }
+  if (b > c) { t = b; b = c; c = t; }
+  if (a > b) { t = a; a = b; b = t; }
+  return a + "," + b + "," + c;
 }
 
 export function edgeKey(a, b) {
@@ -27,24 +31,28 @@ export function buildGraph(diagram) {
     const i = cells[c].id;
     const poly = cells[c].polygon;
     const n = poly.length;
+    // Walking the polygon, vertex k's in-edge is vertex k-1's out-edge and the far end of its
+    // out-edge is vertex k+1's node, so each key is built once and carried to the next step.
+    let inKey = edgeKey(i, poly[n - 1].tag);
+    let nk = nodeKey(i, poly[n - 1].tag, poly[0].tag);
     for (let k = 0; k < n; k++) {
-      const prev = poly[(k - 1 + n) % n];
       const v = poly[k];
-      const next = poly[(k + 1) % n];
-      const nk = nodeKey(i, prev.tag, v.tag);
+      const next = poly[k + 1 === n ? 0 : k + 1];
       let node = nodes.get(nk);
       if (!node) {
         node = { key: nk, x: v.x, y: v.y, idx: nodes.size, edges: [] };
         nodes.set(nk, node);
       }
-      const inKey = edgeKey(i, prev.tag);
       const outKey = edgeKey(i, v.tag);
       if (!node.edges.includes(inKey)) node.edges.push(inKey);
       if (!node.edges.includes(outKey)) node.edges.push(outKey);
+      const nextNk = nodeKey(i, v.tag, next.tag);
       if (!edges.has(outKey)) {
         const cellsOf = v.tag >= 0 ? [Math.min(i, v.tag), Math.max(i, v.tag)] : [i];
-        edges.set(outKey, { key: outKey, a: nk, b: nodeKey(i, v.tag, next.tag), length: 0, cells: cellsOf });
+        edges.set(outKey, { key: outKey, a: nk, b: nextNk, length: 0, cells: cellsOf });
       }
+      inKey = outKey;
+      nk = nextNk;
     }
   }
   for (const e of edges.values()) {
@@ -67,62 +75,79 @@ export function otherEnd(edge, nodeKeyFrom) {
 // Dijkstra from `sourceKey`. Returns Float64Array indexed by node.idx; Infinity when unreachable
 // or when the source is missing. Binary heap with lazy deletion.
 // Optional `skip(edge)` leaves out edges it returns true for, as if they were not in the graph.
-export function shortestPaths(graph, sourceKey, skip) {
+// Optional `maxDist` stops the search there: nodes farther than that stay at Infinity, exactly
+// as if unreachable, so a caller that only needs the neighbourhood pays for the neighbourhood.
+//
+// The heap lives in two module-level typed arrays reused across calls (grown when a graph
+// outsizes them), so a search allocates only its result. Pushes are bounded by the number of
+// relaxations, at most one per directed edge plus the source.
+let HEAP_D = new Float64Array(1 << 12);
+let HEAP_I = new Int32Array(1 << 12);
+export function shortestPaths(graph, sourceKey, skip, maxDist = Infinity) {
   const N = graph.nodeList.length;
   const dist = new Float64Array(N).fill(Infinity);
   const src = graph.nodes.get(sourceKey);
   if (!src) return dist;
-  const hd = [];
-  const hi = [];
-  const push = (d, i) => {
-    let k = hd.length;
-    hd.push(d);
-    hi.push(i);
-    while (k > 0) {
-      const p = (k - 1) >> 1;
-      if (hd[p] <= hd[k]) break;
-      [hd[p], hd[k]] = [hd[k], hd[p]];
-      [hi[p], hi[k]] = [hi[k], hi[p]];
-      k = p;
-    }
-  };
-  const pop = () => {
+  const need = 2 * graph.edges.size + 1;
+  if (HEAP_D.length < need) {
+    let size = HEAP_D.length;
+    while (size < need) size *= 2;
+    HEAP_D = new Float64Array(size);
+    HEAP_I = new Int32Array(size);
+  }
+  const hd = HEAP_D;
+  const hi = HEAP_I;
+  let size = 0;
+  const nodeList = graph.nodeList;
+  const nodesByKey = graph.nodes;
+  const edgesByKey = graph.edges;
+  dist[src.idx] = 0;
+  hd[0] = 0;
+  hi[0] = src.idx;
+  size = 1;
+  while (size > 0) {
+    // Pop the minimum.
     const d = hd[0];
-    const i = hi[0];
-    const ld = hd.pop();
-    const li = hi.pop();
-    if (hd.length) {
-      hd[0] = ld;
-      hi[0] = li;
+    const u = hi[0];
+    size--;
+    if (size > 0) {
+      const ld = hd[size];
+      const li = hi[size];
       let k = 0;
       for (;;) {
         const l = 2 * k + 1;
+        if (l >= size) break;
         const r = l + 1;
-        let m = k;
-        if (l < hd.length && hd[l] < hd[m]) m = l;
-        if (r < hd.length && hd[r] < hd[m]) m = r;
-        if (m === k) break;
-        [hd[m], hd[k]] = [hd[k], hd[m]];
-        [hi[m], hi[k]] = [hi[k], hi[m]];
+        const m = r < size && hd[r] < hd[l] ? r : l;
+        if (hd[m] >= ld) break;
+        hd[k] = hd[m];
+        hi[k] = hi[m];
         k = m;
       }
+      hd[k] = ld;
+      hi[k] = li;
     }
-    return [d, i];
-  };
-  dist[src.idx] = 0;
-  push(0, src.idx);
-  while (hd.length) {
-    const [d, u] = pop();
     if (d > dist[u]) continue;
-    const node = graph.nodeList[u];
+    if (d > maxDist) break;
+    const node = nodeList[u];
     for (const ek of node.edges) {
-      const e = graph.edges.get(ek);
+      const e = edgesByKey.get(ek);
       if (skip && skip(e)) continue;
-      const o = graph.nodes.get(otherEnd(e, node.key));
+      const o = nodesByKey.get(otherEnd(e, node.key));
       const nd = d + e.length;
-      if (nd < dist[o.idx]) {
+      if (nd < dist[o.idx] && nd <= maxDist) {
         dist[o.idx] = nd;
-        push(nd, o.idx);
+        // Push: sift up from the end.
+        let k = size++;
+        while (k > 0) {
+          const p = (k - 1) >> 1;
+          if (hd[p] <= nd) break;
+          hd[k] = hd[p];
+          hi[k] = hi[p];
+          k = p;
+        }
+        hd[k] = nd;
+        hi[k] = o.idx;
       }
     }
   }

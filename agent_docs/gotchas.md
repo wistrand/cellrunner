@@ -57,6 +57,10 @@
   `goalPlacedDist`, and a goal reachable only through a dead edge would otherwise be Infinity
   away, pass the check and pay an infinite score (seen in a headless sweep). Anything new that
   places an enemy on an edge should prefer a live one (`spawnEdge`).
+- **The hunting fields are bounded.** `distToPlayerHunt` and `distToIntercept` stop at
+  `huntReach` cells; beyond that every node reads Infinity. They are for enemies inside the leash
+  only. Never read them for goal placement, spawning or anything else that looks across the
+  board; those use `distToPlayer` and `distToGoal`, which are unbounded.
 - **Distance arrays go stale on every rebuild.** `applyRegion` and `placeGoal` can rebuild
   mid-step. Anything that routes afterwards must use distances computed after the rebuild;
   `distToIntercept` is computed right before enemies move for this reason.

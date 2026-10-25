@@ -93,7 +93,8 @@ A fraction `deadEdgeFrac` of edges is closed to enemies. `rebuild` marks each ed
 from `edgeHash(seed, key)`, a hash outside the `rand()` stream, so the set is fixed per seed
 and an edge keeps its state while it moves. `isDead` is passed as the skip predicate to
 `shortestPaths` for the two hunting fields, `distToPlayerHunt` and `distToIntercept`, both
-computed right before enemies move, to `nextEdgeToward` in `chooseEnemyEdge`, and to
+computed right before enemies move and bounded at `huntReach` cells since every live enemy is
+inside the leash, to `nextEdgeToward` in `chooseEnemyEdge`, and to
 `nearestEdgePoint` in `relocate`; random walkers filter it out of their options, and
 `spawnEdge` picks a live edge at the spawn vertex. Every one of these falls back to any edge
 when no live edge exists, so an enemy is never stranded, but it can then stand on a dead edge

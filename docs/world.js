@@ -52,6 +52,8 @@ export const TUNING = {
   regionMaxFactor: 1.6, // the region may span this many viewports per axis before pruning
   spawnMinDist: 3,     // cells; graph distance from the player below which enemies don't spawn
   enemyLeash: 7,       // cells; an enemy farther than this from the player is moved ahead of it
+  huntReach: 12,       // cells; graph radius the hunting distance fields cover. Above the leash
+                       // (which is straight-line) so a winding path to any live enemy fits.
   spawnMaxDist: 5.5,   // cells; straight-line cap on spawn distance (stays inside the leash)
   pathSamples: 32,     // points in the player's smoothed path
   pathFollow: 6,       // 1 / s; how fast the smoothed path converges on the routed one
@@ -1441,9 +1443,14 @@ export function stepWorld(world, dt, input) {
   movePlayer(world, TUNING.playerSpeed * world.cell * mult * dt);
   sampleTrail(world);
   // Computed here, after the player moved and after any board growth, so hunters and stalkers
-  // read indices of the current graph. Both skip dead edges, so the gradient never enters one.
-  world.distToPlayerHunt = shortestPaths(world.graph, p.node, isDead);
-  world.distToIntercept = shortestPaths(world.graph, interceptNode(world), isDead);
+  // read indices of the current graph. Both skip dead edges, so the gradient never enters one,
+  // and both stop at huntReach: every live enemy is inside the leash, so nothing beyond needs a
+  // distance, and the region is several times larger. The intercept source sits interceptLead
+  // ahead of the player, so its reach is that much longer.
+  const reach = TUNING.huntReach * world.cell;
+  world.distToPlayerHunt = shortestPaths(world.graph, p.node, isDead, reach);
+  world.distToIntercept = shortestPaths(world.graph, interceptNode(world), isDead,
+    reach + TUNING.interceptLead * world.cell);
   const speed = TUNING.enemySpeed * difficultyAt(world.goals, DIFFICULTY_SCRATCH).speed;
   for (const en of world.enemies) {
     const emult = en.kind === "hunter" ? 1.05 : en.kind === "stalker" ? 1.0 : 0.9;

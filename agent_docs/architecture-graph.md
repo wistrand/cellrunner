@@ -45,19 +45,29 @@ graph test checks that nearly all edge keys survive a small perturbation.
 `buildGraph` walks every cell polygon once. Vertex k of cell i is keyed by
 `(i, polygon[k-1].tag, polygon[k].tag)`; the edge from vertex k to k+1 by `(i, polygon[k].tag)`.
 Shared vertices and edges hash to the same key from both sides, so no coordinate matching is
-needed. Lengths are computed at the end from node positions. Zero-length edges don't occur
-because `voronoi.js` merges coincident consecutive vertices first.
+needed. Each key is built once per polygon vertex and carried to the next step: vertex k's
+in-edge key is vertex k-1's out-edge key, and the far node of its out-edge is vertex k+1's node.
+`nodeKey` sorts its three tags with compare-and-swaps rather than an array sort; the graph build
+is the largest share of a frame and these strings are most of it. Lengths are computed at the
+end from node positions. Zero-length edges don't occur because `voronoi.js` merges coincident
+consecutive vertices first.
 
 ## Shortest paths
 
-`shortestPaths(graph, sourceKey)` is Dijkstra with a binary heap and lazy deletion, returning
-distances for every node. The world runs it three times per frame (from the goal, from the
-player's anchor, from the stalkers' intercept vertex) and again after any board change; at several
-hundred vertices it is well under a millisecond.
+`shortestPaths(graph, sourceKey, skip, maxDist)` is Dijkstra with a binary heap and lazy
+deletion, returning distances for every node. `skip(edge)` excludes edges as if absent;
+`maxDist` stops the search at that distance and leaves farther nodes at Infinity, exactly as if
+unreachable. The heap is two module-level typed arrays reused across calls and grown on demand,
+so a search allocates only its result. The world runs it four times per frame: from the goal
+and from the player's anchor over the whole graph, and from the player's anchor and the
+stalkers' intercept vertex without dead edges and bounded at `huntReach`, since every live
+enemy is inside the leash. It runs again after any board change.
 
-`nextEdgeToward(graph, fromKey, dist)` picks the incident edge minimising `dist[other] + length`,
-which is the next step of a shortest path toward the source of `dist`. Falls back to the first
-incident edge, so callers always get an edge for a known node.
+`nextEdgeToward(graph, fromKey, dist, skip)` picks the incident edge minimising
+`dist[other] + length`, which is the next step of a shortest path toward the source of `dist`.
+Pass the `skip` the field was computed with. Falls back to the first edge not skipped, then to
+the first incident edge, so callers always get an edge for a known node. At a node beyond the
+field's `maxDist` every candidate is Infinity and the fallback applies.
 
 ## Queries
 
