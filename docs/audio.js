@@ -106,7 +106,10 @@ export function createAudio({ context = null } = {}) {
       }
     }
     if (ctx.state !== "running" && !context) {
-      ctx.resume();
+      // resume() may be called outside a gesture here (startMusic, run); its promise then stays
+      // pending, or rejects on a closed context, neither of which may surface as an error.
+      const p = ctx.resume();
+      if (p && typeof p.catch === "function") p.catch(() => {});
       kick();
     }
     return ctx;
