@@ -127,7 +127,9 @@ Blending is standard alpha; depth test off. Projection is a uniform resolution a
 ## Canvas2D renderer
 
 Fills every cell polygon (tone, goal, player and heat tints as in GL, without the glow), strokes
-the edges in `EDGE_BUCKETS` passes by tone with rising alpha and width, then the player's path
+the edges in `EDGE_BUCKETS` passes by tone with rising alpha and width (its `edgeAlpha` is
+deliberately several times GL's: with no rim glow, the lines are the whole cell boundary), then
+the player's path
 segment by segment with alpha fading toward the goal, then the goal (beacon ring, pulsing ring,
 orbiting sparks and dot, as in GL without the halo), enemy dots, the player's trail and heading
 chevron, expanding rings for recent
