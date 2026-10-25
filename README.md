@@ -2,8 +2,8 @@
 
 Play it at [cellrunner.live](https://cellrunner.live).
 
-![A run in progress: the route climbs from snow toward the gold marker in the trees, past a
-river of tiny cells, with enemies warming the cells around them](docs/screenshot.png)
+![A run in progress: the route curves toward the gold marker while four enemies warm the cells
+around them](docs/screenshot.png)
 
 A browser game on a living Voronoi mesh. You follow a route toward a gold marker; the game picks
 the route and smooths it as the mesh shifts. Enemies run the cell edges. Where they crowd, the
@@ -61,7 +61,7 @@ server, then
 ```sh
 google-chrome-stable --headless=new --hide-scrollbars --use-angle=swiftshader \
   --enable-unsafe-swiftshader --window-size=1280,800 --virtual-time-budget=8000 \
-  --screenshot=shot.png "http://localhost:8002/?seed=12345&start=1&skip=25&fixeddt=1"
+  --screenshot=shot.png "http://localhost:8002/?seed=777&start=1&skip=20&fixeddt=1"
 ```
 
 Requires Node 18 or newer. Nothing to `npm install`.
