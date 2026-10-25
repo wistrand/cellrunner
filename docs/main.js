@@ -14,7 +14,7 @@ const RESTART_DELAY_MS = 500;
 const MAX_DT = 0.05;
 
 const params = new URLSearchParams(location.search);
-const canvas = document.getElementById("field");
+let canvas = document.getElementById("field"); // replaced when the renderer is switched (V)
 const hud = document.getElementById("hud");
 const hudSlots = {
   score: document.getElementById("hud-score"),
@@ -39,9 +39,29 @@ const ui = {
 };
 // Fullscreen is an optional extra: no API (iPhone Safari), no button.
 const FULLSCREEN_OK = typeof document.documentElement.requestFullscreen === "function";
-// WebGL2 by default; ?gl=0 forces Canvas2D, which is also the fallback when WebGL2 is missing.
-// A failed webgl2 getContext leaves the canvas free for a 2d context.
-const renderer = (params.get("gl") !== "0" && createRendererGL(canvas)) || createRenderer2D(canvas);
+// WebGL2 by default; ?gl=0 starts on Canvas2D, which is also the fallback when WebGL2 is
+// missing. V switches between the two at any time when WebGL2 exists. A canvas keeps its first
+// context type for life, so a switch replaces the canvas element (same id, so the CSS and the
+// pointer binding carry over) and builds the other renderer on the new one.
+const GL_OK = !!document.createElement("canvas").getContext("webgl2");
+let renderer = null;
+let glMode = false;
+function makeRenderer(wantGL, reuseCanvas = false) {
+  if (!reuseCanvas) {
+    const fresh = document.createElement("canvas");
+    fresh.id = canvas.id;
+    canvas.replaceWith(fresh);
+    canvas = fresh;
+    bindCanvas(fresh);
+  }
+  // A failed webgl2 getContext leaves the canvas free for a 2d context.
+  const gl = wantGL && GL_OK ? createRendererGL(canvas) : null;
+  renderer = gl || createRenderer2D(canvas);
+  glMode = !!gl;
+  renderer.resize();
+  if (world) setView(world, renderer.width, renderer.height);
+}
+// The first renderer is made at the bottom of the file, after `world` is declared (it reads it).
 
 const input = { act: false };
 // ?audio=0 keeps the engine off: no AudioContext is ever created and M does nothing.
@@ -270,11 +290,15 @@ function act(now) {
   input.act = true;
 }
 
-canvas.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0) return;
-  if (audioOn) audio.ensure();
-  act(performance.now());
-});
+// The field's pointer binding, applied to the initial canvas and to every replacement.
+function bindCanvas(c) {
+  c.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    if (audioOn) audio.ensure();
+    act(performance.now());
+  });
+}
+bindCanvas(canvas);
 
 // The game-over sheet: a click anywhere on it restarts once the delay has passed, so RESTART has
 // no handler of its own (the pointerdown bubbling from it is the click, and a second handler
@@ -389,6 +413,8 @@ window.addEventListener("keydown", (e) => {
     setPaused(!paused);
   } else if (e.key === "f" || e.key === "F") {
     toggleFullscreen();
+  } else if ((e.key === "v" || e.key === "V") && GL_OK) {
+    makeRenderer(!glMode);
   } else if (e.key === " " || e.key === "Enter") {
     e.preventDefault();
     // On the game-over sheet the keys continue the run (same board, score from zero) once the
@@ -404,6 +430,7 @@ window.addEventListener("resize", () => {
   setView(world, renderer.width, renderer.height);
 });
 
+makeRenderer(params.get("gl") !== "0", true);
 newGame(params.has("seed") ? Number(params.get("seed")) >>> 0 : randomSeed());
 // ?start=1 skips the start sheet (screenshots, quick checks); audio still waits for a gesture.
 // ?skip=S then steps the world S seconds before the first frame, with a scripted dash every

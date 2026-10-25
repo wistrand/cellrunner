@@ -69,7 +69,8 @@ Requires Node 18 or newer. Nothing to `npm install`.
 ### Browser support
 
 The default renderer is WebGL2. If the browser can't create a WebGL2 context the game falls back to
-a Canvas2D renderer with the same look minus the glow. Add `?gl=0` to the URL to force Canvas2D.
+a Canvas2D renderer with the same look minus the glow. Add `?gl=0` to the URL to start on
+Canvas2D, and press **V** at any time to switch between the two where WebGL2 exists.
 
 ## Layout
 

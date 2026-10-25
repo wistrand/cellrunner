@@ -15,7 +15,7 @@ docs/
                    # ?seed=777&start=1&skip=20&fixeddt=1 (recipe in README)
   main.js          # browser-only: input, RAF loop, HUD, best score, renderer selection
   renderer-gl.js   # browser-only: WebGL2 renderer (default)
-  renderer.js      # browser-only: Canvas2D renderer (fallback, or ?gl=0)
+  renderer.js      # browser-only: Canvas2D renderer (fallback, ?gl=0, or V to switch live)
   world.js         # pure: the simulation (region, sites, entities, rules, camera). Browser + node.
   graph.js         # pure: edge graph of a diagram, heap Dijkstra, nearest-edge queries
   voronoi.js       # pure: bucketed half-plane tessellation, seeded PRNG, site placement

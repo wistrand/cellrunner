@@ -12,8 +12,11 @@
 
 ## Overview
 
-Two renderers, same interface, chosen once at startup in `main.js`: `renderer-gl.js` (WebGL2,
-default) and `renderer.js` (Canvas2D, used when WebGL2 is unavailable or `?gl=0` is in the URL).
+Two renderers, same interface, chosen in `main.js`: `renderer-gl.js` (WebGL2, default) and
+`renderer.js` (Canvas2D, used when WebGL2 is unavailable or `?gl=0` is in the URL). V switches
+between them live where WebGL2 exists: a canvas keeps its first context type for life, so
+`makeRenderer` replaces the canvas element (same id, pointer binding reapplied) and builds the
+other renderer on it, then refits the camera with `setView`.
 Both read the world object described in [architecture-world.md](architecture-world.md) and hold no
 rules.
 
