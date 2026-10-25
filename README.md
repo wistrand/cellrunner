@@ -18,6 +18,8 @@ No install, no build, no dependencies. Plain ES modules and a Canvas2D renderer.
   is worth its distance when it was set; reach it without dashing and you get all of it. The HUD
   shows what the next one pays. Every other marker brings another enemy, and new kinds join as
   you score. Touching an enemy ends the run.
+- The ground has a grain: open areas are fast, dense areas slow, for you and the enemies alike.
+  Pale blue edges are closed to enemies; the route may use them, so they are the safe lanes.
 - **R** starts a new run. On the game-over sheet, **C**, Space, Enter or CONTINUE keep the board
   and the enemy mix and start the score from zero; a click restarts. `?seed=N` in the URL reproduces a field.
 - **M** mutes and unmutes. The music is composed from the seed, so a seed also reproduces the

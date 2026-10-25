@@ -66,7 +66,9 @@ diagram changes every frame anyway, so there is nothing to cache.
   `rim`/`rimB`) by the cell's `world.tone`, and the tone also shifts the glow's band mix: open
   ground is mostly the wide soft band, dense ground mostly the tight line.
 - **Edges** are thin quads in the flat program (`gl.LINES` cannot be widened). Each edge's alpha
-  and width rise with the mean tone of its cells (`edgeTone`). The player's path
+  and width rise with the mean tone of its cells (`edgeTone`). An edge with `dead` set (closed
+  to enemies, see the world doc) is drawn instead in `edgeDead`, a pale tint at a fixed width,
+  in both renderers, so the safe lanes can be read. The player's path
   (`world.path`, player first) gets a second batch: a wide faint halo under a bright core, both
   fading toward the goal so the path stays readable over glowing cells. A third flat batch
   (`playerMarks`) draws the player's trail from `world.trail`, oldest first, thin and faint to
@@ -107,8 +109,8 @@ falloff as the GL shader. Kept intentionally simple; it exists so the game runs 
 ## Colour roles
 
 Each renderer has its own `COLORS` table (CSS strings in 2D, float arrays in GL) with the same
-roles: background, cell at tone 0 and tone 1, hot cell, edge, route, goal, hunter, wanderer,
-player, boost, shadow, and GL-only rim and glow variants. Keep the two tables in step when
+roles: background, cell at tone 0 and tone 1, hot cell, edge, dead edge, route, goal, hunter,
+wanderer, player, boost, shadow, vignette, and GL-only rim and glow variants. Keep the two tables in step when
 changing a role. Tone colours stay away from red (danger) and gold (goal).
 
 ## DPR and resize

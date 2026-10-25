@@ -69,12 +69,35 @@ noise from `noise.js` sampled at the cell centre: below `sparse` the cell has no
 `dense` it has two (on a diagonal, each jittered in its own quadrant), otherwise one. Grid ids
 encode `(column, row, k)`; split-born sites get ids from `nextId`, which starts above any grid id.
 
+Rivers bypass the density: `riverAt` samples the same simplex a third time, at `riverScale`
+and its own offset, and a grid cell within `riverWidth` of the zero contour gets four sites on a
+jittered 2 x 2 sub-grid (`gridSites`, ids `k` 0..3, which is why `gridId` reserves four slots
+per cell and `SPLIT_ID_BASE` sits above 2^34). Twice the densest ordinary ground, so the band
+reads as a distinct texture of tiny cells with a tight graph. Zero contours of simplex noise
+never end, so a river is a closed loop or crosses the whole board. Rivers do not touch the tone,
+so they are neither fast nor slow ground.
+
 A second, far broader sample of the same noise is the tone, `toneAt` (0 open, 1 dense), at
 `toneScale` cells per noise unit and offset so it does not line up with the density. It shifts
 the density by up to `toneDensity`, so open-toned areas have larger cells, and every site stores
 its home's tone in `world.homes`; `finishStep` copies it into `world.tone` per cell for the
 renderers, which blend fill, rim, glow and edge styles by it. The field is continuous, so areas
 blend into each other over several cells rather than switching.
+
+The tone is also terrain: `terrainSpeed` samples it at a mover's own position and blends
+`toneSpeedOpen` (tone 0) to `toneSpeedDense` (tone 1), and `stepWorld` multiplies the player's
+and every enemy's distance for the step by it. Open ground is fast, dense ground slow, for
+everyone alike.
+
+A fraction `deadEdgeFrac` of edges is closed to enemies. `rebuild` marks each edge's `dead`
+from `edgeHash(seed, key)`, a hash outside the `rand()` stream, so the set is fixed per seed
+and an edge keeps its state while it moves. `isDead` is passed as the skip predicate to
+`shortestPaths` for `distToPlayer` and `distToIntercept`, to `nextEdgeToward` in
+`chooseEnemyEdge`, and to `nearestEdgePoint` in `relocate`; random walkers filter it out of
+their options, and `spawnEdge` picks a live edge at the spawn vertex. Every one of these falls
+back to any edge when no live edge exists, so an enemy is never stranded, but it can then stand
+on a dead edge until the next vertex. `distToGoal` ignores dead edges entirely, so the player's
+route may run along them: they are the safe lanes, drawn tinted by both renderers.
 
 `world.region` is the active rectangle of grid cells; `world.bounds` is its box in world units
 and the clip rectangle for the tessellation. `ensureRegion(x, y)` grows the region to cover the

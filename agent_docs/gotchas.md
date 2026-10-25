@@ -50,6 +50,11 @@
   the start when close, and the path cut straight across a cell.
 - **Spawn inside the leash.** `spawnNode` caps straight-line distance below `enemyLeash`;
   otherwise `leashEnemies` respawns the new enemy next frame, forever, and it flickers.
+- **Two graphs in one: enemy fields skip dead edges, the goal field does not.** `distToPlayer`
+  and `distToIntercept` are computed with the `isDead` skip and must be descended with the same
+  skip (`nextEdgeToward(..., isDead)`); `distToGoal` sees every edge so the route can use dead
+  ones. Mixing them routes a hunter into a dead edge, or makes the player avoid its safe lanes.
+  Anything new that places an enemy on an edge should prefer a live one (`spawnEdge`).
 - **Distance arrays go stale on every rebuild.** `applyRegion` and `placeGoal` can rebuild
   mid-step. Anything that routes afterwards must use distances computed after the rebuild;
   `distToIntercept` is computed right before enemies move for this reason.

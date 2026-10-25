@@ -66,7 +66,8 @@ export function otherEnd(edge, nodeKeyFrom) {
 
 // Dijkstra from `sourceKey`. Returns Float64Array indexed by node.idx; Infinity when unreachable
 // or when the source is missing. Binary heap with lazy deletion.
-export function shortestPaths(graph, sourceKey) {
+// Optional `skip(edge)` leaves out edges it returns true for, as if they were not in the graph.
+export function shortestPaths(graph, sourceKey, skip) {
   const N = graph.nodeList.length;
   const dist = new Float64Array(N).fill(Infinity);
   const src = graph.nodes.get(sourceKey);
@@ -116,6 +117,7 @@ export function shortestPaths(graph, sourceKey) {
     const node = graph.nodeList[u];
     for (const ek of node.edges) {
       const e = graph.edges.get(ek);
+      if (skip && skip(e)) continue;
       const o = graph.nodes.get(otherEnd(e, node.key));
       const nd = d + e.length;
       if (nd < dist[o.idx]) {
@@ -128,14 +130,19 @@ export function shortestPaths(graph, sourceKey) {
 }
 
 // The edge leaving `fromKey` that descends `dist` fastest (the next step of a shortest path to
-// the source `dist` was computed from). Null only for an unknown node.
-export function nextEdgeToward(graph, fromKey, dist) {
+// the source `dist` was computed from). `skip(edge)` excludes edges as in `shortestPaths`; pass
+// the same predicate `dist` was computed with. Falls back to any edge not skipped, then to any
+// edge at all, so a walker is never stranded. Null only for an unknown or isolated node.
+export function nextEdgeToward(graph, fromKey, dist, skip) {
   const node = graph.nodes.get(fromKey);
   if (!node) return null;
   let best = null;
   let bestD = Infinity;
+  let open = null;
   for (const ek of node.edges) {
     const e = graph.edges.get(ek);
+    if (skip && skip(e)) continue;
+    if (!open) open = ek;
     const o = graph.nodes.get(otherEnd(e, fromKey));
     const d = dist[o.idx] + e.length;
     if (d < bestD) {
@@ -143,14 +150,16 @@ export function nextEdgeToward(graph, fromKey, dist) {
       best = ek;
     }
   }
-  return best || node.edges[0] || null;
+  return best || open || node.edges[0] || null;
 }
 
 // Closest point on any edge to (x, y). Returns `{ edge, t, x, y, d2 }` with t measured from
 // edge.a to edge.b. Null for an empty graph.
-export function nearestEdgePoint(graph, x, y) {
+// Optional `skip(edge)` leaves edges out of the search; null if every edge is skipped.
+export function nearestEdgePoint(graph, x, y, skip) {
   let best = null;
   for (const e of graph.edges.values()) {
+    if (skip && skip(e)) continue;
     const a = graph.nodes.get(e.a);
     const b = graph.nodes.get(e.b);
     const dx = b.x - a.x;

@@ -22,6 +22,7 @@ const COLORS = {
   playerRim: [0.75, 0.9, 1.0],
   edge: [1, 1, 1, 0.02],         // edge lines at tone 0; alpha rises to edgeAlphaB at tone 1
   edgeAlphaB: 0.07,
+  edgeDead: [0.55, 0.8, 1, 0.16], // edges closed to enemies: a pale lane the player may use
   route: [0.55, 0.75, 1, 0.95],
   routeHalo: [0.47, 0.67, 1, 0.22],
   goal: [0.84, 0.66, 0.29, 1],
@@ -514,10 +515,15 @@ export function createRendererGL(canvas) {
     edgeW.reset();
     routeW.reset();
     // Edge lines: faint and thin on open ground, brighter and a little wider on dense ground.
+    // Dead edges (closed to enemies) are a pale tinted line at a fixed width.
     const ec = [COLORS.edge[0], COLORS.edge[1], COLORS.edge[2], 0];
     for (const e of graph.edges.values()) {
       const a = graph.nodes.get(e.a);
       const b = graph.nodes.get(e.b);
+      if (e.dead) {
+        quad(edgeW, a.x, a.y, b.x, b.y, 0.45 * px, COLORS.edgeDead);
+        continue;
+      }
       const t = edgeTone(world, e);
       ec[3] = COLORS.edge[3] + (COLORS.edgeAlphaB - COLORS.edge[3]) * t;
       quad(edgeW, a.x, a.y, b.x, b.y, (0.2 + 0.2 * t) * px, ec);

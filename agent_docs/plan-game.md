@@ -82,6 +82,13 @@ under budget on a mid-range phone.
 ### Phase 3: depth
 
 - [ ] Cell types on the route (slow mud, speed strips) assigned from the seeded stream.
+- [x] Terrain tones: the tone field sets ground speed for player and enemies alike
+      (`terrainSpeed`, `toneSpeedOpen`/`toneSpeedDense`). Open ground fast, dense ground slow.
+- [x] Dead edges: `deadEdgeFrac` of edges, hashed from edge key and seed, closed to enemies but
+      open to the route. Drawn tinted as safe lanes. Tuning the fraction by feel is still open.
+- [x] Rivers: bands of two-site grid cells along a noise contour (`riverAt`, `riverScale`,
+      `riverWidth`). Width and frequency by feel still open; a tint for them is a possible
+      follow-up if cell size alone does not read.
 - [x] Difficulty curve beyond "one more enemy per goal": `spawnTable` by goals reached sets the
       enemy mix, the spawn rate per goal and the enemy speed; new kinds debut at fixed goals.
       Tuned slow: headless, a perfect reactive player lasts about a minute.

@@ -11,6 +11,7 @@ const COLORS = {
   goalCell: [107, 84, 33],  // RGB; blended in around the goal
   playerCell: [51, 77, 117], // RGB; blended in around the player
   edgeAlpha: [0.02, 0.07], // edge line alpha at tone 0 and tone 1
+  edgeDead: "rgba(140,204,255,0.16)", // edges closed to enemies: a pale lane the player may use
   vignetteAlpha: 0.35,     // screen-space darkening toward the corners; the max alpha
   route: [140, 190, 255, 0.95], // RGBA; alpha fades along the route
   goal: "#d6a94a",
@@ -113,6 +114,7 @@ export function createRenderer(canvas) {
       ctx.strokeStyle = `rgba(255,255,255,${(ea0 + (ea1 - ea0) * t).toFixed(3)})`;
       ctx.beginPath();
       for (const e of graph.edges.values()) {
+        if (e.dead) continue;
         let et = 0;
         for (const id of e.cells) et += tone[world.siteIndex.get(id)];
         et = e.cells.length ? et / e.cells.length : 0;
@@ -124,6 +126,18 @@ export function createRenderer(canvas) {
       }
       ctx.stroke();
     }
+    // Dead edges (closed to enemies): one pass, a pale tinted line at a fixed width.
+    ctx.lineWidth = 0.9 * px;
+    ctx.strokeStyle = COLORS.edgeDead;
+    ctx.beginPath();
+    for (const e of graph.edges.values()) {
+      if (!e.dead) continue;
+      const a = graph.nodes.get(e.a);
+      const b = graph.nodes.get(e.b);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
 
     // The smoothed path, player first, fading toward the goal.
     ctx.lineWidth = 3 * px;

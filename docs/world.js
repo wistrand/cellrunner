@@ -60,12 +60,28 @@ export const TUNING = {
   densityScale: 6,     // grid cells per noise unit; larger means broader patches
   sparse: 0.28,
   dense: 0.74,
+  // Rivers: bands of tiny cells along the zero contour of a third noise sample. Every grid cell
+  // in the band holds four sites, twice the densest ground, so the graph is tight; enemies mill
+  // about in them while the route threads through (`riverAt`, `gridSites`).
+  // The band's width in cells scales with riverScale * riverWidth; how much of the board is river
+  // scales with riverWidth alone. So for rarer rivers of the same width, raise the scale and
+  // lower the width together.
+  riverScale: 100,     // grid cells per noise unit; larger means fewer, longer, lazier rivers
+  riverWidth: 0.015,   // noise units either side of the contour; about 1.5 grid cells wide
   // Tone: a second, much broader simplex field (0 open, 1 dense) that gives large areas a
   // character of their own. It shifts the density (bigger cells where it is low) and tints the
   // renderers' fill, rim and edge styles. Continuous, so areas blend into each other.
   toneScale: 40,       // grid cells per noise unit; an area spans tens of cells
   toneContrast: 0.75,  // noise amplitude to tone; above 0.5 the extremes saturate
   toneDensity: 0.18,   // density shift at tone 0 (minus) and tone 1 (plus)
+  // Terrain: the tone also sets the ground speed for the player and every enemy, sampled at
+  // their own position, so open ground is fast and dense ground is slow (`terrainSpeed`).
+  toneSpeedOpen: 1.15, // speed multiplier at tone 0
+  toneSpeedDense: 0.85, // speed multiplier at tone 1
+  // Dead edges: this fraction of edges, chosen by a hash of the edge key and the seed so the set
+  // is stable while the board moves, is closed to enemies. The player's route may still use
+  // them (`isDeadEdge`, `rebuild`).
+  deadEdgeFrac: 0.12,
   // Camera.
   camMargin: 2.5,      // cells of padding around player and goal in the fit
   camMinScale: 0.55,
@@ -105,7 +121,7 @@ export const TUNING = {
 
 const ID_HALF = 1 << 15;          // grid coordinates live in [-ID_HALF, ID_HALF)
 const ID_SPAN = 2 * ID_HALF;
-const SPLIT_ID_BASE = 2 ** 33;    // ids for split-born sites start above any grid id
+const SPLIT_ID_BASE = 2 ** 34;    // ids for split-born sites start above any grid id (k < 4)
 
 function hash2(seed, c, r) {
   let h = (seed ^ Math.imul(c | 0, 0x9e3779b1) ^ Math.imul(r | 0, 0x85ebca77)) >>> 0;
@@ -116,7 +132,7 @@ function hash2(seed, c, r) {
 }
 
 function gridId(c, r, k) {
-  return ((c + ID_HALF) * ID_SPAN + (r + ID_HALF)) * 2 + k;
+  return ((c + ID_HALF) * ID_SPAN + (r + ID_HALF)) * 4 + k;
 }
 
 // Density in [0, 1] at grid cell (c, r): one octave of simplex noise, sampled at the cell centre.
@@ -127,6 +143,15 @@ function density(world, c, r) {
   return d + TUNING.toneDensity * (2 * t - 1);
 }
 
+// True inside a river: the same simplex sampled at riverScale and offset from the other two
+// fields, within riverWidth of its zero contour. Zero contours of simplex noise are closed or
+// board-spanning curves, so rivers wind without ends.
+function riverAt(world, c, r) {
+  const s = TUNING.riverScale;
+  const n = world.noise((c + 0.5) / s - 61.75, (r + 0.5) / s + 23.5);
+  return Math.abs(n) < TUNING.riverWidth;
+}
+
 // The tone at a world position, 0..1. The same simplex as the density, sampled far broader and
 // offset so the two fields do not line up.
 function toneAt(world, x, y) {
@@ -135,12 +160,49 @@ function toneAt(world, x, y) {
   return Math.min(1, Math.max(0, 0.5 + TUNING.toneContrast * n));
 }
 
+// Ground speed multiplier at a world position: toneSpeedOpen on open ground, toneSpeedDense on
+// dense ground, blended by the tone. The same for the player and every enemy.
+function terrainSpeed(world, x, y) {
+  const t = toneAt(world, x, y);
+  return TUNING.toneSpeedOpen + (TUNING.toneSpeedDense - TUNING.toneSpeedOpen) * t;
+}
+
+// A uniform draw in [0, 1) from an edge key and the seed (FNV-1a over the key, then mixed). Not
+// part of the `rand()` stream, so it costs no draw and is the same for an edge every frame.
+function edgeHash(seed, key) {
+  let h = (seed ^ 0x9e3779b9) >>> 0;
+  for (let i = 0; i < key.length; i++) {
+    h = Math.imul(h ^ key.charCodeAt(i), 0x01000193) >>> 0;
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13;
+  return (h >>> 0) / 4294967296;
+}
+
+// Closed to enemies. Set on every edge by `rebuild`; `isDead` is the predicate the enemy
+// routing passes to the graph helpers.
+function isDeadEdge(world, key) {
+  return edgeHash(world.seed, key) < TUNING.deadEdgeFrac;
+}
+const isDead = (e) => e.dead === true;
+
 // Zero, one or two sites for grid cell (c, r), pushed onto `out`.
 function gridSites(world, c, r, out) {
   const cell = world.cell;
+  const rand = mulberry32(hash2(world.seed, c, r));
+  if (riverAt(world, c, r)) {
+    // Four sites on a 2 x 2 sub-grid, each jittered within its quarter. Spacing stays above
+    // minSep by construction (0.5 cell apart, jitter at most 0.1 each).
+    for (let k = 0; k < 4; k++) {
+      const jx = 0.25 + 0.5 * (k & 1) + (rand() - 0.5) * 0.2;
+      const jy = 0.25 + 0.5 * (k >> 1) + (rand() - 0.5) * 0.2;
+      out.push({ x: (c + jx) * cell, y: (r + jy) * cell, id: gridId(c, r, k) });
+    }
+    return;
+  }
   const d = density(world, c, r);
   if (d < TUNING.sparse) return;
-  const rand = mulberry32(hash2(world.seed, c, r));
   if (d > TUNING.dense) {
     // Two sites on a diagonal, each jittered inside its own quadrant. Minimum spacing stays
     // above sepHard by construction.
@@ -236,7 +298,7 @@ export function createWorld(seed, width, height) {
   resetTrail(world);
   world.path = new Float64Array(2 * TUNING.pathSamples);
   world.pathTarget = new Float64Array(2 * TUNING.pathSamples);
-  world.distToPlayer = shortestPaths(world.graph, world.player.node);
+  world.distToPlayer = shortestPaths(world.graph, world.player.node, isDead);
   placeGoal(world, world.player.x, world.player.y, 0, -1, TUNING.goalDistance,
     TUNING.goalDistance * 0.9 * cell);
   startLeg(world);
@@ -284,7 +346,7 @@ export function continueWorld(world) {
   world.airStart = -Infinity;
   world.airUntil = -Infinity;
   world.actReadyAt = world.time;
-  world.distToPlayer = shortestPaths(world.graph, world.player.node);
+  world.distToPlayer = shortestPaths(world.graph, world.player.node, isDead);
   for (const en of world.enemies) respawn(world, en);
   placeGoal(world, world.player.x, world.player.y, world.goalX - world.player.x,
     world.goalY - world.player.y, TUNING.goalDistance, TUNING.goalDistance * 0.9 * world.cell);
@@ -370,6 +432,7 @@ function removeSiteAt(world, idx) {
 function rebuild(world) {
   world.diagram = computeVoronoi(world.sites, world.bounds);
   world.graph = buildGraph(world.diagram);
+  for (const e of world.graph.edges.values()) e.dead = isDeadEdge(world, e.key);
   const index = new Map();
   for (let i = 0; i < world.sites.length; i++) index.set(world.sites[i].id, i);
   world.siteIndex = index;
@@ -417,7 +480,7 @@ function applyRegion(world, next) {
     world.goalX = n.x;
     world.goalY = n.y;
   }
-  world.distToPlayer = shortestPaths(graph, world.player.node);
+  world.distToPlayer = shortestPaths(graph, world.player.node, isDead);
   // Enemies left behind in a pruned strip come back inside the view, away from the player.
   for (const en of displaced) respawn(world, en);
 }
@@ -508,7 +571,8 @@ function relocate(ent, graph) {
     }
     return;
   }
-  const hit = nearestEdgePoint(graph, ent.x, ent.y);
+  // Prefer an edge enemies may use; any edge if the only ones nearby are dead.
+  const hit = nearestEdgePoint(graph, ent.x, ent.y, isDead) || nearestEdgePoint(graph, ent.x, ent.y);
   const a = graph.nodes.get(hit.edge.a);
   const b = graph.nodes.get(hit.edge.b);
   ent.edge = hit.edge.key;
@@ -565,11 +629,23 @@ function spawnNode(world, opening = false) {
   return farNode(world, 0.5, inView);
 }
 
+// A random edge at `n` for an enemy to start on: one not dead if the node has any. One draw
+// either way.
+function spawnEdge(world, n) {
+  let open = 0;
+  for (const ek of n.edges) if (!world.graph.edges.get(ek).dead) open++;
+  const pick = Math.floor(world.rand() * (open || n.edges.length));
+  if (!open) return n.edges[pick];
+  let k = 0;
+  for (const ek of n.edges) if (!world.graph.edges.get(ek).dead && k++ === pick) return ek;
+  return n.edges[0];
+}
+
 // Put an existing enemy at a fresh spawn vertex.
 function respawn(world, en) {
   const graph = world.graph;
   const n = spawnNode(world);
-  const edge = n.edges[Math.floor(world.rand() * n.edges.length)];
+  const edge = spawnEdge(world, n);
   en.edge = edge;
   en.from = n.key;
   en.to = otherEnd(graph.edges.get(edge), n.key);
@@ -649,7 +725,7 @@ function spawnKind(world) {
 function spawnEnemy(world, kind = rollKind(world), opening = false) {
   if (world.enemies.length >= TUNING.enemiesMax) return;
   const n = spawnNode(world, opening);
-  const edge = n.edges[Math.floor(world.rand() * n.edges.length)];
+  const edge = spawnEdge(world, n);
   const ent = makeEntity(world, n.key, edge, kind);
   if (kind === "splitter") ent.nextActAt = world.time + TUNING.splitInterval;
   if (kind === "joiner") ent.nextActAt = world.time + TUNING.joinInterval;
@@ -956,13 +1032,23 @@ function interceptNode(world) {
   return nearestNode(graph, x, y).key;
 }
 
+// Enemies never enter a dead edge when they have a choice; the distance fields they descend
+// were computed without those edges (`isDead`), so the gradient never points into one.
 function chooseEnemyEdge(world, ent, atKey, cameBy) {
-  if (ent.kind === "hunter") return nextEdgeToward(world.graph, atKey, world.distToPlayer);
+  if (ent.kind === "hunter") {
+    return nextEdgeToward(world.graph, atKey, world.distToPlayer, isDead);
+  }
   // Stalkers cut the player off: they route to where the path leads, not where the player is.
-  if (ent.kind === "stalker") return nextEdgeToward(world.graph, atKey, world.distToIntercept);
-  // Wanderers, splitters and joiners all random-walk.
+  if (ent.kind === "stalker") {
+    return nextEdgeToward(world.graph, atKey, world.distToIntercept, isDead);
+  }
+  // Wanderers, splitters and joiners all random-walk, not back the way they came and not onto
+  // a dead edge, unless that leaves nothing. One draw either way.
   const node = world.graph.nodes.get(atKey);
-  const options = node.edges.length > 1 ? node.edges.filter((k) => k !== cameBy) : node.edges;
+  const edges = world.graph.edges;
+  let options = node.edges.filter((k) => k !== cameBy && !edges.get(k).dead);
+  if (options.length === 0) options = node.edges.filter((k) => !edges.get(k).dead);
+  if (options.length === 0) options = node.edges;
   return options[Math.floor(world.rand() * options.length)];
 }
 
@@ -1324,24 +1410,26 @@ export function stepWorld(world, dt, input) {
   world.goalX = gn.x;
   world.goalY = gn.y;
   world.distToGoal = shortestPaths(graph, world.goal);
-  world.distToPlayer = shortestPaths(graph, p.node);
+  // Enemy fields skip dead edges; the goal field does not, so the route may use them.
+  world.distToPlayer = shortestPaths(graph, p.node, isDead);
 
   if (input.act && isActReady(world)) dash(world);
 
   // The camera may have drifted toward an untessellated strip; keep the view covered.
   ensureRegion(world, world.goalX, world.goalY);
 
-  const mult = isAirborne(world) ? TUNING.boostMult : 1;
+  const mult = (isAirborne(world) ? TUNING.boostMult : 1) * terrainSpeed(world, p.x, p.y);
   updatePath(world, dt);
   movePlayer(world, TUNING.playerSpeed * world.cell * mult * dt);
   sampleTrail(world);
   // Computed here, after the player moved and after any board growth, so stalkers read indices
   // of the current graph.
-  world.distToIntercept = shortestPaths(world.graph, interceptNode(world));
+  world.distToIntercept = shortestPaths(world.graph, interceptNode(world), isDead);
   const speed = TUNING.enemySpeed * difficultyAt(world.goals, DIFFICULTY_SCRATCH).speed;
   for (const en of world.enemies) {
     const emult = en.kind === "hunter" ? 1.05 : en.kind === "stalker" ? 1.0 : 0.9;
-    advance(world, en, speed * world.cell * emult * dt, chooseEnemyEdge);
+    const ground = terrainSpeed(world, en.x, en.y);
+    advance(world, en, speed * world.cell * emult * ground * dt, chooseEnemyEdge);
   }
   leashEnemies(world);
 
