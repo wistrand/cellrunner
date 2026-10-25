@@ -17,9 +17,12 @@ function check(cond, msg) {
   }
 }
 
-const SEEDS = [1, 7, 12345, 424242];
+// `--quick` (what `npm test` passes): one seed, 12 s, and no requirement that every event type
+// occurred; `npm run test:full` runs four seeds to 90 s and requires all of them.
+const QUICK = process.argv.includes("--quick");
+const SEEDS = QUICK ? [1] : [1, 7, 12345, 424242];
 const DT = 1 / 60;
-const STEPS = 60 * 90;
+const STEPS = 60 * (QUICK ? 12 : 90);
 TUNING.enemiesStart = 4; // see the header; the test owns TUNING for its process
 
 function run(seed) {
@@ -74,9 +77,12 @@ function run(seed) {
     check(mp.layers.lead === world.goals > 0, `seed ${seed} step ${i}: lead after the first goal`);
     check(!mp.layers.lead || mp.layers.arp, `seed ${seed} step ${i}: arp plays whenever the lead does`);
   }
-  // A dead world reports nothing more.
-  check(diffWorld(tr, world).length === 0, `seed ${seed}: nothing after death`);
-  check(tr.threat === 0, `seed ${seed}: no threat after death`);
+  // A dead world reports nothing more. (The quick budget may end before a death; the full suite
+  // requires one through the event-coverage check below.)
+  if (world.dead) {
+    check(diffWorld(tr, world).length === 0, `seed ${seed}: nothing after death`);
+    check(tr.threat === 0, `seed ${seed}: no threat after death`);
+  }
   return { world, tr, log, count, scores };
 }
 
@@ -96,8 +102,10 @@ for (const seed of SEEDS) {
   // Events and the array are reused: the pool stays as large as the busiest step.
   check(tr.pool.length <= 8, `seed ${seed}: event pool ${tr.pool.length} stays small`);
 }
-for (const type of ["score", "dashStart", "dashEnd", "goalMoved", "split", "join", "death"]) {
-  check(total[type] > 0, `scripted worlds produce ${type}`);
+if (!QUICK) {
+  for (const type of ["score", "dashStart", "dashEnd", "goalMoved", "split", "join", "death"]) {
+    check(total[type] > 0, `scripted worlds produce ${type}`);
+  }
 }
 
 // Heat: an enemy at the player then gone: heat holds and decays at the release rate.

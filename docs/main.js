@@ -2,7 +2,7 @@
 // geometry in voronoi.js and graph.js, drawing in renderer.js, sound in audio.js (events from
 // audio-events.js, music from music.js).
 
-import { createWorld, stepWorld, continueWorld, setView, legPoints }
+import { createWorld, stepWorld, continueWorld, setView, legPoints, serializeWorld, restoreWorld }
   from "./world.js";
 import { createRenderer as createRenderer2D } from "./renderer.js";
 import { createRendererGL } from "./renderer-gl.js";
@@ -24,6 +24,7 @@ const hudSlots = {
 const ui = {
   start: document.getElementById("start"),
   startBest: document.getElementById("start-best"),
+  startContinue: document.getElementById("start-continue"),
   over: document.getElementById("gameover"),
   overScore: document.getElementById("over-score"),
   overLine: document.getElementById("over-line"),
@@ -80,6 +81,32 @@ function saveBest() {
   }
 }
 
+// The run is saved on death and on pause so CONTINUE survives a reload. A save that fails to
+// restore (another version, storage tampered with) is dropped and the start sheet simply offers
+// no continue.
+const SAVE_KEY = "cellrunner.save";
+function saveRun() {
+  try {
+    localStorage.setItem(SAVE_KEY, serializeWorld(world));
+  } catch {
+    // Storage unavailable or full; the run is not resumable after a reload.
+  }
+}
+function loadSave() {
+  try {
+    return localStorage.getItem(SAVE_KEY);
+  } catch {
+    return null;
+  }
+}
+function dropSave() {
+  try {
+    localStorage.removeItem(SAVE_KEY);
+  } catch {
+    // Nothing to do.
+  }
+}
+
 function newGame(s) {
   seed = s;
   world = createWorld(seed, renderer.width, renderer.height);
@@ -120,6 +147,7 @@ function continueRun() {
 function showStart() {
   state = "start";
   ui.startBest.textContent = best > 0 ? `best ${best}` : "\u00a0";
+  show(ui.startContinue, loadSave() !== null);
   show(ui.start, true);
   show(ui.over, false);
   show(ui.paused, false);
@@ -151,6 +179,7 @@ function setPaused(on) {
   if (on) {
     audio.setThreat(0);
     audio.pauseMusic();
+    saveRun(); // a paused run survives a reload too: the start sheet resumes it
   } else {
     audio.resumeMusic();
   }
@@ -208,6 +237,7 @@ function frame(now) {
   if (world.dead && !wasDead) {
     diedAt = now;
     audio.stopMusic({ fade: 0.4, cadence: true });
+    saveRun();
     if (world.score > best && Number.isFinite(world.score)) {
       best = world.score;
       saveBest();
@@ -257,6 +287,37 @@ ui.continueBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
 ui.continueBtn.addEventListener("click", () => {
   if (audioOn) audio.ensure();
   if (state === "over") continueRun();
+});
+
+// Continue the saved (dead) run from the start sheet after a reload: restore the world, refit it
+// to this viewport, then continue as from the game-over sheet.
+function continueSaved() {
+  if (state !== "start") return;
+  const json = loadSave();
+  if (json === null) return;
+  let restored;
+  try {
+    restored = restoreWorld(json);
+  } catch {
+    dropSave();
+    show(ui.startContinue, false);
+    return;
+  }
+  world = restored;
+  seed = world.seed;
+  setView(world, renderer.width, renderer.height);
+  // A save made at death continues as from the game-over sheet; one made while paused simply
+  // resumes, score and all.
+  if (world.dead) continueWorld(world);
+  diedAt = 0;
+  game++;
+  enterPlay();
+}
+ui.startContinue.addEventListener("pointerdown", (e) => e.stopPropagation());
+ui.startContinue.addEventListener("click", (e) => {
+  e.currentTarget.blur();
+  if (audioOn) audio.ensure();
+  continueSaved();
 });
 
 // Icons sit over the field; their pointerdown must not reach the canvas as a dash. A clicked
@@ -310,8 +371,9 @@ window.addEventListener("keydown", (e) => {
   if (audioOn) audio.ensure();
   if (e.key === "r" || e.key === "R") {
     if (state !== "start") startRun(randomSeed());
-  } else if ((e.key === "c" || e.key === "C") && state === "over") {
-    continueRun();
+  } else if (e.key === "c" || e.key === "C") {
+    if (state === "over") continueRun();
+    else if (state === "start") continueSaved();
   } else if (e.key === "m" || e.key === "M") {
     if (audioOn) audio.toggleMute();
   } else if (e.key === "p" || e.key === "P") {

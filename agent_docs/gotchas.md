@@ -17,9 +17,11 @@
 - **Goal placement must check graph distance, not just "a different vertex".** The nearest
   vertex to a spot five cells away can be three cells away along the graph. `placeGoal` pushes
   the spot further until `minDist` holds.
-- **Don't place new sites relative to an entity position.** An entity sits on an edge, roughly
-  half a cell from the two sites it separates, so anything derived from its position lands too
-  close to a site. Use the cell's vertices (see `splitCell`) when choosing where to insert.
+- **A new site may sit on an edge, never off it toward a site.** An edge point is equidistant
+  from the two sites it separates, so the splitter's own position clears `minSep` in all but the
+  tightest cells; anything nudged from there toward a site halves that margin and fails in dense
+  mesh. `splitCell` tries the splitter's position, then the cell's far vertex midpoint; keep both
+  behind `sitePlaceable`, which also keeps the box margin.
 - **Board edits go before the rebuild.** `applyBoardEdits` runs first in `stepWorld`. An edit
   after the rebuild leaves the renderer with a heat array shorter than the cell list and NaN in
   the shader.
@@ -73,7 +75,10 @@
   Canvas2D users behind. Check `?gl=0` after rendering changes.
 - **Airborne is a time check, not a flag.** `isAirborne(world)` compares `world.time` with
   `world.airUntil`. There is no per-entity air state to reset; a new dash just moves the times.
-- **`npm test` is not run by the agent.** The user runs it. State clearly when a change to the
+- **`npm test` is the quick suite; `npm run test:full` is the real check.** The quick suite
+  trims step budgets and skips the continue scenario and the event-coverage requirement, so it
+  runs in seconds and can miss a slow-to-appear regression. Run the full suite before a change
+  to the pure modules is called done. State clearly when a change to the
   pure modules is unverified.
 - **The sheets act on pointerdown; their buttons have no handlers.** START and RESTART are
   inside sheets whose `pointerdown` calls `act`. A click handler on the button as well would
@@ -91,6 +96,13 @@
   latency; a bar anchored before the jump lands in the past and the stalled-tab skip drops it,
   so the music began a bar late. `tick` waits for `state === "running"`, anchors on its first
   running tick, and re-anchors instead of skipping until a bar has actually been scheduled.
+- **A new world field must be added to `SAVE_FIELDS` or be derivable.** `serializeWorld` saves
+  an explicit list; a field left out restores at its `createWorld` default and the restored run
+  silently diverges from the original. Timestamps that can be `-Infinity` are fine (sentinel
+  strings), typed arrays go in `SAVE_TYPED`, and anything a rebuild recomputes stays out. Bump
+  `SAVE_VERSION` when the shape changes; old saves are dropped, not migrated. The world test's
+  save-and-restore block catches a missing field only if the field affects the simulation
+  within its 300 steps.
 - **Music bypasses the compressor.** Routing it through the SFX compressor clicked on downbeats
   in astrocatch. Keep the two buses separate.
 - **Audio envelopes are linear ramps ending at exactly 0.** Exponential ramps cannot reach 0 and

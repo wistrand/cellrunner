@@ -6,7 +6,8 @@
 // GLSL lives in template strings. Never put a backtick inside a shader comment; it terminates the
 // template literal.
 
-import { isAirborne, airProgress, pathReveal, threat, TUNING } from "./world.js";
+import { isAirborne, airProgress, cooldownLeft, pathReveal, spawnProgress, threat, TUNING }
+  from "./world.js";
 
 const COLORS = {
   bg: [0.043, 0.051, 0.078, 1],
@@ -523,6 +524,8 @@ export function createRendererGL(canvas) {
   const FADE_GLOW = [0, 0, 0, 0];
   const FADE_OUTLINE = [0, 0, 0, 0];
   const FADE_DIM = [0, 0, 0, 0];
+  const COOLDOWN_RING = [COLORS.boost[0], COLORS.boost[1], COLORS.boost[2], 0];
+  const SPAWN_RING = [0, 0, 0, 0];
   function faded(c, a, out) {
     out[0] = c[0];
     out[1] = c[1];
@@ -655,7 +658,7 @@ export function createRendererGL(canvas) {
     // looks where they go, splitters are two lobes breathing apart, joiners a ring tightening on
     // an inner one. The outline keeps them readable over hot cells. The phase per enemy comes
     // from its index, so neighbours do not pulse in step.
-    const er = cell * 0.085;
+    const erBase = cell * 0.085;
     const fadeNear = ENEMY_FADE_NEAR * cell;
     const fadeSpan = (ENEMY_FADE_FAR - ENEMY_FADE_NEAR) * cell;
     const t = world.time;
@@ -683,6 +686,14 @@ export function createRendererGL(canvas) {
       const ph = idx++ * 1.7;
       const x = en.x;
       const y = en.y;
+      // Spawn-in: a fresh or leashed-in enemy grows from a third of its size over spawnGrace,
+      // inside an expanding, fading ring in its colour, and cannot kill until it is full size.
+      const s = spawnProgress(world, en);
+      const er = erBase * (0.3 + 0.7 * s);
+      if (s < 1) {
+        const sc = faded(COLORS[en.kind], a * (1 - s), SPAWN_RING);
+        dot(x, y, erBase * (1 + 3 * s), sc, 0.8);
+      }
       if (en.kind === "hunter") {
         const pulse = 0.85 + 0.15 * Math.sin(t * 9 + ph);
         const sx = x + hx * er * 0.9;
@@ -752,6 +763,13 @@ export function createRendererGL(canvas) {
       dot(player.x, py, pr * (1 + 0.6 * lift), COLORS.player);
     } else {
       dot(player.x, player.y, pr * 3.2, [1, 1, 1, 0.22], -1);
+      // Landing cooldown: the dash ring stays after touchdown and shrinks into the player as
+      // the cooldown runs out, so the moment the next dash is allowed is visible.
+      const cd = cooldownLeft(world);
+      if (cd > 0) {
+        COOLDOWN_RING[3] = COLORS.boost[3] * (0.35 + 0.65 * cd);
+        dot(player.x, player.y, pr * (1 + 1.2 * cd), COOLDOWN_RING, 0.8);
+      }
       dot(player.x, player.y, pr, COLORS.player);
     }
     drawProgram(dots, dotW);

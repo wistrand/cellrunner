@@ -51,7 +51,8 @@ goal, death on contact. Large areas differ by a broad tone field (cell size, col
 
 ## Testing methodology
 
-- `npm test` for anything in `voronoi.js`, `graph.js`, `world.js` (the user runs it). The world
+- `npm test` (quick, seconds) while working on `voronoi.js`, `graph.js`, `world.js`; `npm run
+  test:full` (minutes) before calling a change done. The world
   test is a headless smoke and determinism check, not a rules test.
 - Visual checks in the browser with a fixed `?seed=`.
 - `node scripts/difficulty.js [cap] [seeds] [policy]` for difficulty: scripted players (passive,

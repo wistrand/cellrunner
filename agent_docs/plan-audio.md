@@ -118,7 +118,8 @@ border stays too quiet: two arrangements of the one piece crossfaded by the spac
     pulse and the score chime align to.
 - SFX tied to the harmony (built in phase C, `playEvent` in `audio.js`):
   - `score`: the current chord rising from the next 16th, then its root an octave up;
-  - `dashStart`: noise through a rising bandpass; `dashEnd`: a short falling triangle tick;
+  - `dashStart`: a rising sine (300 to 640 Hz) with a band of noise riding on it; a wide noise
+    sweep alone read as hiss (2026-10-25). `dashEnd`: a short falling triangle tick;
   - `split`: a blip rising a fifth from the chord's top tone; `join`: one falling a fifth onto
     the chord's root; both panned to their position;
   - enemy approach: a low pulse on the chord root, one per beat, eighth or sixteenth as `threat`

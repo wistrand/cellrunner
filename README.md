@@ -13,16 +13,19 @@ No install, no build, no dependencies. Plain ES modules and a Canvas2D renderer.
 
 - **Click** (or Space, or Enter) to dash: for a moment you are airborne and fast, still following
   the route. Nothing can touch you until you land, however many edges you cover. The next dash
-  comes a moment after landing, never in the air.
+  comes a moment after landing, never in the air; the ring around you shrinks away until it is.
 - Every dash pushes the gold marker away from you and halves what it will pay, and each dash on
   the way to the same marker pushes it further than the last, up to a limit. A marker
   is worth its distance when it was set; reach it without dashing and you get all of it. The HUD
   shows what the next one pays. Every other marker brings another enemy, and new kinds join as
-  you score. Touching an enemy ends the run.
+  you score. Touching an enemy ends the run. An enemy left far behind is brought back ahead of
+  you; it grows in inside a ring over half a second and cannot catch you until it has.
 - The ground has a grain: open areas are fast, dense areas slow, for you and the enemies alike.
   Pale blue edges are closed to enemies; the route may use them, so they are the safe lanes.
 - **R** starts a new run. On the game-over sheet, **C**, Space, Enter or CONTINUE keep the board
-  and the enemy mix and start the score from zero; a click restarts. `?seed=N` in the URL reproduces a field.
+  and the enemy mix and start the score from zero; a click restarts. The run is kept in the
+  browser at death and whenever you pause, so after a reload the start sheet offers CONTINUE
+  LAST RUN (or **C**): a paused run resumes as it was, a finished one continues. `?seed=N` in the URL reproduces a field.
 - **M** or the speaker icon mutes and unmutes. The music is composed from the seed, so a seed
   also reproduces the tune. `?audio=0` keeps sound off entirely.
 - **P** or the pause icon pauses the game and the music; P, Space or a click resumes. A hidden
@@ -41,7 +44,8 @@ ES modules can't be loaded from `file://`, so a tiny static server is bundled:
 
 ```sh
 npm start          # http://localhost:8002/
-npm test           # headless checks for the geometry and simulation modules
+npm test           # quick headless checks for the geometry and simulation modules
+npm run test:full  # the same with full step budgets (minutes)
 ```
 
 Requires Node 18 or newer. Nothing to `npm install`.

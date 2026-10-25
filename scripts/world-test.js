@@ -1,7 +1,8 @@
 // Headless smoke test for docs/world.js: step a world for a while with scripted input and check it
 // stays sane and deterministic. Run via `npm test`.
 
-import { createWorld, stepWorld, continueWorld, TUNING, spawnWeightsAt, ENEMY_KINDS }
+import { createWorld, stepWorld, continueWorld, TUNING, spawnWeightsAt, ENEMY_KINDS,
+  serializeWorld, restoreWorld }
   from "../docs/world.js";
 import { isBorderNode } from "../docs/graph.js";
 
@@ -12,6 +13,10 @@ function check(cond, msg) {
     console.error("FAIL:", msg);
   }
 }
+
+// `--quick` (what `npm test` passes) trims the step budgets to a few seconds of node time and
+// skips the continue scenario; `npm run test:full` runs everything.
+const QUICK = process.argv.includes("--quick");
 
 function run(seed, w, h, steps) {
   const world = createWorld(seed, w, h);
@@ -59,9 +64,9 @@ function run(seed, w, h, steps) {
   return world;
 }
 
-for (const seed of [3, 99, 2024]) {
-  const a = run(seed, 900, 700, 1200);
-  const b = run(seed, 900, 700, 1200);
+for (const seed of QUICK ? [2024] : [3, 99, 2024]) {
+  const a = run(seed, 900, 700, QUICK ? 500 : 1200);
+  const b = run(seed, 900, 700, QUICK ? 500 : 1200);
   check(a.player.x === b.player.x && a.player.y === b.player.y && a.score === b.score &&
     a.time === b.time, `seed ${seed}: deterministic replay`);
   check(a.enemies.length >= TUNING.enemiesStart, `seed ${seed}: enemies present`);
@@ -81,11 +86,11 @@ for (const seed of [3, 99, 2024]) {
 }
 
 // Portrait phone-sized viewport.
-run(11, 390, 800, 600);
+run(11, 390, 800, QUICK ? 300 : 600);
 
 // Continue after death: same board and goals, score reset, enemies moved off, and the world keeps
-// its invariants when stepped on.
-{
+// its invariants when stepped on. Full suite only: it needs a death, which takes a while.
+if (!QUICK) {
   const w = createWorld(99, 900, 700);
   // A dash every four seconds: often enough to exercise dashes, rare enough that the player is
   // on the ground most of the time and the roster of two can catch it within the budget.
@@ -111,6 +116,34 @@ run(11, 390, 800, 600);
   } else {
     console.log("continue: seed 99 did not die in 100 s; continue untested");
   }
+}
+
+// Save and restore: a world serialized mid-run and restored must continue exactly as the
+// original does under the same inputs, draws included (the PRNG state travels with the save).
+{
+  const a = createWorld(31337, 1000, 700);
+  for (let i = 0; i < (QUICK ? 200 : 400); i++) stepWorld(a, 1 / 60, { act: i % 90 === 0 });
+  const json = serializeWorld(a);
+  check(typeof json === "string" && json.length > 0 && !json.includes("null,"),
+    "save: a JSON string with no Infinity turned into null");
+  const b = restoreWorld(json);
+  check(b.seed === a.seed && b.time === a.time && b.score === a.score && b.goals === a.goals &&
+    b.sites.length === a.sites.length && b.enemies.length === a.enemies.length,
+    "restore: counters, sites and roster match");
+  check(b.player.x === a.player.x && b.player.y === a.player.y, "restore: player position");
+  check(b.graph.edges.size === a.graph.edges.size, "restore: same graph");
+  for (let i = 0; i < (QUICK ? 150 : 300) && !a.dead; i++) {
+    const input = { act: i % 70 === 0 };
+    stepWorld(a, 1 / 60, input);
+    stepWorld(b, 1 / 60, input);
+    check(a.player.x === b.player.x && a.player.y === b.player.y && a.score === b.score &&
+      a.dead === b.dead && a.enemies.length === b.enemies.length,
+      `restore step ${i}: the restored world tracks the original`);
+    if (failures > 20) break;
+  }
+  let threw = false;
+  try { restoreWorld("{\"version\":0}"); } catch { threw = true; }
+  check(threw, "restore: rejects another version");
 }
 
 if (failures) {

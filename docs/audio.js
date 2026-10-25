@@ -534,7 +534,10 @@ export function createAudio({ context = null } = {}) {
         break;
       }
       case "dashStart":
-        noise({ from: 500, to: 3500, q: 1.4, gain: 0.32, dur: 0.3, pan });
+        // A rising sine with a band of noise riding on it: the tone carries the event, the noise
+        // gives it air. (A wide 0.32-gain sweep to 3.5 kHz on its own read as pure hiss.)
+        noise({ from: 400, to: 2200, q: 2, gain: 0.3, dur: 0.24, pan });
+        tone({ freq: 300, to: 640, type: "sine", gain: 0.14, dur: 0.2, pan });
         break;
       case "dashEnd":
         tone({ freq: 900, to: 450, type: "triangle", gain: 0.08, dur: 0.07, pan });

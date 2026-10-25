@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/serve.js",
-    "test": "node scripts/voronoi-test.js && node scripts/graph-test.js && node scripts/world-test.js && node scripts/music-test.js && node scripts/events-test.js"
+    "test": "node scripts/voronoi-test.js && node scripts/graph-test.js && node scripts/world-test.js --quick && node scripts/music-test.js && node scripts/events-test.js --quick",
+    "test:full": "node scripts/voronoi-test.js && node scripts/graph-test.js && node scripts/world-test.js && node scripts/music-test.js && node scripts/events-test.js"
   }
 }

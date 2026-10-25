@@ -42,7 +42,8 @@ https://cellrunner.live. All non-browser tooling lives under `scripts/`.
 
 ```sh
 npm start   # dev server at http://localhost:8002/  (?seed=N reproduces a field)
-npm test    # node checks: voronoi, graph, world, music, events
+npm test    # quick node checks (seconds): voronoi, graph, world, music, events with short budgets
+npm run test:full  # the same with full step budgets and the continue scenario (minutes)
 ```
 
 `main.js`, `renderer.js`, `renderer-gl.js` and `audio.js` are the only browser-only files.
@@ -120,7 +121,7 @@ Everything else must stay DOM-free so `npm test` keeps working in node.
   allocates and is the known cost. Measure with a headless step loop before optimising.
 - Never run `deno fmt` or lint tools over this repo.
 - Any change to `voronoi.js`, `graph.js`, `world.js`, `music.js` or `audio-events.js` must be
-  re-verified with `npm test` (ask the user to run it).
+  re-verified with `npm test` (quick) and, before it is called done, `npm run test:full`.
 
 ## Documentation Style
 

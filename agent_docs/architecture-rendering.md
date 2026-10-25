@@ -88,7 +88,10 @@ diagram changes every frame anyway, so there is nothing to cache.
   same. A third flat batch
   (`playerMarks`) draws the player's trail from `world.trail`, oldest first, thin and faint to
   wide and brighter, ending at the player, and a heading chevron a fifth of a cell ahead of the
-  player toward the second path sample. Both follow the lifted player while airborne. They exist
+  player toward the second path sample. Both follow the lifted player while airborne. On the
+  ground, while the landing cooldown runs, the dash ring is drawn around the player shrinking
+  and fading with `cooldownLeft(world)`, so the instant the next dash is allowed is visible;
+  the 2D renderer does the same. They exist
   so the player stays findable in a crowd.
 - **Dots** are quads with a circle drawn in the fragment shader. The ring attribute selects
   filled disc, ring (value is the inner radius fraction), or soft glow (negative). Glows sit
@@ -102,7 +105,10 @@ diagram changes every frame anyway, so there is nothing to cache.
   (body, a snout ahead, two embers trailing behind), wanderers sway sideways and carry an
   orbiting satellite, stalkers are an eye (a ring with the pupil offset toward the heading),
   splitters are two ringed lobes breathing apart across the heading, joiners a ring tightening
-  on an inner ring. Each gets a dark outline under every part so it stays readable over hot
+  on an inner ring. An enemy inside its spawn window (`spawnProgress` below 1, fresh or leashed
+  in) is drawn at a third of its size growing to full, inside an expanding ring in its colour
+  that fades out, so no enemy appears silently; the world does not arm it until the window
+  ends. Each gets a dark outline under every part so it stays readable over hot
   cells; the 2D renderer draws the same shapes without the glow and with one ember. Both
   renderers fade enemies by distance
   from the player, from full inside `ENEMY_FADE_NEAR` cells to `ENEMY_FADE_MIN` at

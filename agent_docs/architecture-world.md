@@ -168,7 +168,12 @@ chasing where the player is.
 
 `spawnNode` picks interior vertices inside the camera view, at least `spawnMinDist` from the
 player, preferring the goal's side; `leashEnemies` respawns any enemy farther than `enemyLeash`
-from the player there. Without the leash a player who keeps running into fresh board outruns
+from the player there. A leashed enemy is never silent: `respawn` and every non-opening
+`spawnEnemy` stamp `spawnedAt`, the renderers grow the enemy in from a third of its size inside
+an expanding ring over `spawnGrace` (`spawnProgress`), and only an enemy past that window can
+catch the player (`isArmed`, the collision check). A hunter that was behind the player and
+reappears ahead is therefore seen appearing and cannot kill for the first half second. Without
+the leash a player who keeps running into fresh board outruns
 every enemy, since they are slower and only spawn on goals.
 
 ## Relocation after a rebuild
@@ -202,6 +207,16 @@ the enemy mix) kept, every enemy respawned away from the player, a fresh goal ah
 old direction, a new leg. From then on the run is a function of the seed, the inputs and the
 continue points, not of the inputs alone.
 
+`serializeWorld` and `restoreWorld` let a run outlive a page reload: `main.js` saves the world
+to local storage on death and on pause, and the start sheet offers CONTINUE LAST RUN (and the C
+key) while a save exists; a save made at death goes through `continueWorld`, one made while
+paused resumes as it was. The save is JSON of the plain state listed in `SAVE_FIELDS` plus the three
+typed arrays and the PRNG state (`mulberry32` exposes `getState`/`setState`); everything derived
+is rebuilt on restore (`rebuild`, the goal and player distance fields, `finishStep`). The
+`-Infinity` timestamps travel as sentinel strings because JSON has no Infinity. `SAVE_VERSION`
+guards the format: a save from another version throws, and `main.js` drops it. The world test
+checks that a restored world tracks the original step for step under the same inputs.
+
 ## Scoring
 
 A goal pays `legPoints`: its graph distance from the player when it was set (`legBase`, cells,
@@ -224,19 +239,25 @@ kept moving and read badly.
 
 ## Board modifiers and limits
 
-- **Splitter** (`splitCell`): inserts a new site inside one of the two cells beside its edge,
-  halfway from that cell's site to the cell's farthest vertex on the side away from the splitter.
-  A Voronoi vertex is the local maximum of empty space, so the midpoint clears every site by half
-  the vertex radius; placing relative to the splitter's own position failed `minSep` nearly every
-  time. The new site's home is its birth position.
+- **Splitter** (`splitCell`): inserts a new site at the splitter's own position. A point on an
+  edge is equidistant from the two sites it separates, so it clears `minSep` whenever they are
+  more than twice `minSep` apart, which is every cell but the tightest, and the new cell opens
+  under the splitter where the player sees it. Where that fails (rivers, dense ground) the
+  fallback is halfway from the chosen cell's site to its farthest vertex on the side away from
+  the splitter: a vertex is the local maximum of empty space, so the midpoint clears every site
+  by half the vertex radius. `sitePlaceable` is the one check for both spots. The new site's home
+  is its birth position.
 - **Joiner** (`joinCell`): removes the site of one of the two cells beside its edge; the area is
   absorbed by the neighbours.
 
-Each modifier acts on its own interval (`splitInterval`, `joinInterval`); `applyBoardEdits`
-allows one edit per step and none within `editMinGap` of the last. Limits: the site count stays
-within `siteCountMin`..`siteCountMax` of the region's grid cell count; a cell smaller than
-`splitMinArea` is not split; a join is skipped if any neighbour plus the removed area would exceed
-`joinMaxArea`; a new site keeps `minSep` from every site at insertion. Every successful edit
+Each modifier acts on its own interval after a successful edit (`splitInterval`,
+`joinInterval`) and retries a skipped attempt after `editRetry`, so a modifier in the wrong spot
+is not idle for a whole interval; `applyBoardEdits` allows one edit per step and none within
+`editMinGap` of the last. Limits: the site count stays within `siteCountMin`..`siteCountMax` of
+the region's grid cell count; a cell smaller than `splitMinArea` is not split; a join is skipped
+if any neighbour plus half the removed area would exceed `joinMaxArea` (the whole area blocked
+nearly every join on open ground); a new site keeps `minSep` from every site at insertion. Every
+successful edit
 pushes a marker onto `world.flashes`, pruned after `flashDuration`, because a join is otherwise a
 single-frame change nobody notices. `editCount` counts edits for tests.
 

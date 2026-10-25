@@ -52,6 +52,8 @@ export const TUNING = {
   regionMaxFactor: 1.6, // the region may span this many viewports per axis before pruning
   spawnMinDist: 3,     // cells; graph distance from the player below which enemies don't spawn
   enemyLeash: 7,       // cells; an enemy farther than this from the player is moved ahead of it
+  spawnGrace: 0.5,     // s after an enemy spawns or is leashed in during which it cannot kill;
+                       // the renderers grow it in over the same time, so no enemy appears silently
   huntReach: 12,       // cells; graph radius the hunting distance fields cover. Above the leash
                        // (which is straight-line) so a winding path to any live enemy fits.
   spawnMaxDist: 5.5,   // cells; straight-line cap on spawn distance (stays inside the leash)
@@ -106,8 +108,9 @@ export const TUNING = {
   camFollow: 6,        // 1 / s; easing rate toward the fit once a move has started
   camHoldMargin: 0.8,  // cells; the camera moves only when player or goal get this close to the edge
   // Board modifiers. Limits keep the mesh from degenerating in either direction.
-  splitInterval: 2.0,  // s between a splitter's attempts
-  joinInterval: 3.0,   // s between a joiner's attempts
+  splitInterval: 2.4,  // s between a splitter's successful edits
+  joinInterval: 3.2,   // s between a joiner's successful edits
+  editRetry: 0.25,     // s before a modifier whose attempt was skipped tries again
   editMinGap: 0.6,     // s between any two board edits, across all modifiers
   siteCountMin: 0.5,   // fraction of the region's grid cell count the joiners may not go below
   siteCountMax: 2.0,   // fraction of the region's grid cell count the splitters may not exceed
@@ -379,6 +382,47 @@ function sampleTrail(world) {
   world.trailAt = world.time + TUNING.trailInterval;
 }
 
+// Save and restore, so a run survives a page reload (main.js saves on death and offers CONTINUE
+// on the start sheet). The saved form is JSON of the plain state: everything derived (diagram,
+// graph, site index, distance fields, per-cell arrays, noise) is rebuilt on restore, and the
+// PRNG state goes along so the draw sequence resumes exactly. JSON has no Infinity, so the
+// sentinel strings below stand in for the -Infinity timestamps.
+const SAVE_FIELDS = ["seed", "cell", "view", "region", "bounds", "sites", "homes", "vel",
+  "nextId", "lastEditAt", "editCount", "flashes", "player", "pathReset", "pathStart",
+  "trailHead", "trailAt", "enemies", "goal", "goalX", "goalY", "goalOriginX", "goalOriginY",
+  "goalMovedAt", "legRevealAt", "goalPlacedDist", "legBase", "legDashes", "goals", "spawnDebt",
+  "lastPoints", "playerBiome", "playerSpace", "camera", "camGoal", "score", "time", "dead",
+  "airStart", "airUntil", "actReadyAt"];
+const SAVE_TYPED = ["path", "pathTarget", "trail"];
+const SAVE_VERSION = 1;
+const infReplacer = (k, v) => (v === Infinity ? "+Inf" : v === -Infinity ? "-Inf" : v);
+const infReviver = (k, v) => (v === "+Inf" ? Infinity : v === "-Inf" ? -Infinity : v);
+
+export function serializeWorld(world) {
+  const data = { version: SAVE_VERSION, rand: world.rand.getState() };
+  for (const k of SAVE_FIELDS) data[k] = world[k];
+  for (const k of SAVE_TYPED) data[k] = Array.from(world[k]);
+  return JSON.stringify(data, infReplacer);
+}
+
+// Throws on anything that is not a save of the current version; callers treat that as "no
+// save". The returned world is ready to draw and to `continueWorld`.
+export function restoreWorld(json) {
+  const data = JSON.parse(json, infReviver);
+  if (!data || data.version !== SAVE_VERSION || !Number.isInteger(data.seed)) {
+    throw new Error("not a save");
+  }
+  const world = createWorld(data.seed, data.view.w, data.view.h);
+  for (const k of SAVE_FIELDS) world[k] = data[k];
+  for (const k of SAVE_TYPED) world[k] = Float64Array.from(data[k]);
+  world.rand.setState(data.rand);
+  rebuild(world);
+  world.distToGoal = shortestPaths(world.graph, world.goal);
+  world.distToPlayer = shortestPaths(world.graph, world.player.node);
+  finishStep(world);
+  return world;
+}
+
 // Continue after death on the same board: the score resets, the goals reached (and so the enemy
 // mix) stay, every enemy is moved away from the player, and a fresh goal is placed ahead. The
 // run is no longer a pure function of the input sequence from here, but still of the seed plus
@@ -446,6 +490,26 @@ export function pathReveal(world) {
 
 export function isActReady(world) {
   return world.time >= world.actReadyAt && !isAirborne(world);
+}
+
+// The landing cooldown as a fraction still to run: 1 at touchdown, 0 once the next dash is
+// allowed, and 0 while airborne. The renderers shrink the dash ring by it.
+export function cooldownLeft(world) {
+  if (isAirborne(world) || TUNING.landCooldown <= 0) return 0;
+  return Math.max(0, Math.min(1, (world.actReadyAt - world.time) / TUNING.landCooldown));
+}
+
+// How far an enemy is through its spawn-in, 0 at the moment it appeared to 1 after spawnGrace.
+// The renderers grow it in by this; `isArmed` is the rule side of the same window.
+export function spawnProgress(world, en) {
+  if (TUNING.spawnGrace <= 0) return 1;
+  return Math.max(0, Math.min(1, (world.time - en.spawnedAt) / TUNING.spawnGrace));
+}
+
+// Lethal and past its spawn grace: only these can catch the player. A leashed enemy reappearing
+// ahead of the player gets the same half second as a fresh spawn, so nothing kills silently.
+export function isArmed(world, en) {
+  return isLethal(en) && world.time - en.spawnedAt >= TUNING.spawnGrace;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -579,7 +643,7 @@ function ensureRegion(world, x, y) {
 function makeEntity(world, fromKey, edgeKey, kind) {
   const e = world.graph.edges.get(edgeKey);
   const ent = { kind, edge: edgeKey, from: fromKey, to: otherEnd(e, fromKey), t: 0,
-    x: 0, y: 0, toX: 0, toY: 0, nextActAt: 0 };
+    x: 0, y: 0, toX: 0, toY: 0, nextActAt: 0, spawnedAt: -Infinity };
   placeOnEdge(ent, world.graph);
   return ent;
 }
@@ -704,6 +768,7 @@ function respawn(world, en) {
   en.from = n.key;
   en.to = otherEnd(graph.edges.get(edge), n.key);
   en.t = 0;
+  en.spawnedAt = world.time; // grows in and cannot kill for spawnGrace (see isArmed)
   placeOnEdge(en, graph);
 }
 
@@ -783,6 +848,8 @@ function spawnEnemy(world, kind = rollKind(world), opening = false) {
   const ent = makeEntity(world, n.key, edge, kind);
   if (kind === "splitter") ent.nextActAt = world.time + TUNING.splitInterval;
   if (kind === "joiner") ent.nextActAt = world.time + TUNING.joinInterval;
+  // The opening roster is simply there; everything spawned later grows in with a grace period.
+  if (!opening) ent.spawnedAt = world.time;
   world.enemies.push(ent);
 }
 
@@ -1184,12 +1251,14 @@ function applyBoardEdits(world) {
   for (const en of world.enemies) {
     if (en.kind !== "splitter" && en.kind !== "joiner") continue;
     if (world.time < en.nextActAt) continue;
-    const interval = en.kind === "splitter" ? TUNING.splitInterval : TUNING.joinInterval;
-    en.nextActAt = world.time + interval;
     const edge = world.graph.edges.get(en.edge);
     if (!edge) continue;
     const id = edge.cells[Math.floor(world.rand() * edge.cells.length)];
     const done = en.kind === "splitter" ? splitCell(world, id, en) : joinCell(world, id);
+    // A skipped attempt (limits, too small, too close) is retried soon rather than after a full
+    // interval, or a modifier in the wrong spot spends most of its life idle.
+    const interval = en.kind === "splitter" ? TUNING.splitInterval : TUNING.joinInterval;
+    en.nextActAt = world.time + (done ? interval : TUNING.editRetry);
     if (done) {
       world.lastEditAt = world.time;
       world.editCount++;
@@ -1198,50 +1267,66 @@ function applyBoardEdits(world) {
   }
 }
 
-// Insert a new site inside cell `id`, halfway from the cell's site to the cell's farthest vertex
-// on the side away from the splitter. A Voronoi vertex is the local maximum of empty space, so the
-// midpoint is at least half that vertex's radius from every site; this is the one placement that
-// reliably passes minSep in a dense mesh. Skipped when the cell is small, the board is full, or
-// the spot is still too close to a site or the box.
-function splitCell(world, id, en) {
+// True if a new site may go at (x, y): inside the box with a margin and at least minSep from
+// every site.
+function sitePlaceable(world, x, y) {
   const { sites, cell, bounds } = world;
+  const margin = 0.3 * cell;
+  if (x < bounds.x + margin || x > bounds.x + bounds.w - margin ||
+      y < bounds.y + margin || y > bounds.y + bounds.h - margin) return false;
+  const sep2 = (TUNING.minSep * cell) ** 2;
+  for (const o of sites) if (dist2(o.x, o.y, x, y) < sep2) return false;
+  return true;
+}
+
+// Insert a new site where the splitter is. A point on an edge is equidistant from the two sites
+// it separates, so the splitter's own position clears minSep whenever those sites are more than
+// twice minSep apart, which is every cell but the tightest; the new cell then opens exactly
+// under the splitter, where the player sees it happen. Where that fails (rivers, dense ground),
+// the fallback is halfway from cell `id`'s site to its farthest vertex on the side away from the
+// splitter: a vertex is the local maximum of empty space, so the midpoint clears every site by
+// half the vertex radius. Skipped when the cell is small, the board is full, or neither spot is
+// placeable.
+function splitCell(world, id, en) {
+  const { sites, cell } = world;
   if (sites.length >= Math.ceil(regionCount(world) * TUNING.siteCountMax)) return false;
   const idx = world.siteIndex.get(id);
   if (idx === undefined) return false;
   const c = world.diagram.cells[idx];
   if (c.area < TUNING.splitMinArea * cell * cell) return false;
-  const s = sites[idx];
-  const awayX = s.x - en.x;
-  const awayY = s.y - en.y;
-  let best = null;
-  let bestD = -1;
-  for (const pass of [true, false]) {
-    for (const v of c.polygon) {
-      if (pass && (v.x - s.x) * awayX + (v.y - s.y) * awayY <= 0) continue;
-      const d = dist2(v.x, v.y, s.x, s.y);
-      if (d > bestD) {
-        bestD = d;
-        best = v;
+  let nx = en.x;
+  let ny = en.y;
+  if (!sitePlaceable(world, nx, ny)) {
+    const s = sites[idx];
+    const awayX = s.x - en.x;
+    const awayY = s.y - en.y;
+    let best = null;
+    let bestD = -1;
+    for (const pass of [true, false]) {
+      for (const v of c.polygon) {
+        if (pass && (v.x - s.x) * awayX + (v.y - s.y) * awayY <= 0) continue;
+        const d = dist2(v.x, v.y, s.x, s.y);
+        if (d > bestD) {
+          bestD = d;
+          best = v;
+        }
       }
+      if (best) break;
     }
-    if (best) break;
+    if (!best) return false;
+    nx = (s.x + best.x) * 0.5;
+    ny = (s.y + best.y) * 0.5;
+    if (!sitePlaceable(world, nx, ny)) return false;
   }
-  if (!best) return false;
-  const nx = (s.x + best.x) * 0.5;
-  const ny = (s.y + best.y) * 0.5;
-  const margin = 0.3 * cell;
-  if (nx < bounds.x + margin || nx > bounds.x + bounds.w - margin ||
-      ny < bounds.y + margin || ny > bounds.y + bounds.h - margin) return false;
-  const sep2 = (TUNING.minSep * cell) ** 2;
-  for (const o of sites) if (dist2(o.x, o.y, nx, ny) < sep2) return false;
   addSite(world, { x: nx, y: ny, id: world.nextId++ });
   world.flashes.push({ x: nx, y: ny, start: world.time, kind: "splitter" });
   return true;
 }
 
 // Remove the site of cell `id`; its area is absorbed by its neighbours. Skipped when the board is
-// at its minimum or when any neighbour would end up larger than joinMaxArea (approximated as the
-// neighbour's area plus the whole removed area).
+// at its minimum or when any neighbour would end up larger than joinMaxArea. A neighbour gains
+// a share of the removed area, not all of it; half is a generous bound that still lets joins
+// happen on open ground (the whole area blocked nearly every join there).
 function joinCell(world, id) {
   const { sites, cell } = world;
   if (sites.length <= Math.floor(regionCount(world) * TUNING.siteCountMin)) return false;
@@ -1251,7 +1336,7 @@ function joinCell(world, id) {
   const maxArea = TUNING.joinMaxArea * cell * cell;
   for (const nid of c.neighbors) {
     const ni = world.siteIndex.get(nid);
-    if (ni !== undefined && world.diagram.cells[ni].area + c.area > maxArea) return false;
+    if (ni !== undefined && world.diagram.cells[ni].area + c.area * 0.5 > maxArea) return false;
   }
   const s = sites[idx];
   world.flashes.push({ x: s.x, y: s.y, start: world.time, kind: "joiner" });
@@ -1518,7 +1603,7 @@ export function stepWorld(world, dt, input) {
   if (!isAirborne(world)) {
     const r2 = (TUNING.catchRadius * world.cell) ** 2;
     for (const en of world.enemies) {
-      if (!isLethal(en)) continue;
+      if (!isArmed(world, en)) continue;
       if (dist2(p.x, p.y, en.x, en.y) < r2) {
         world.dead = true;
         break;

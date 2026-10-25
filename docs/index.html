@@ -87,6 +87,7 @@
     gap: 8px;
   }
   #icons.hidden { display: none; }
+  #start-continue.hidden { display: none; }
   #icons-left {
     position: fixed;
     bottom: calc(12px + env(safe-area-inset-bottom));
@@ -178,15 +179,39 @@
     color: rgba(255, 255, 255, 0.35);
   }
   @media (pointer: coarse) { .keys { display: none; } }
-  .desc {
-    margin-top: 36px;
-    max-width: 360px;
-    font-size: 13px;
-    font-weight: 300;
-    line-height: 1.65;
-    color: rgba(255, 255, 255, 0.55);
+  /* The intro: three illustrated panels (route, dash, enemies) that wrap into a column on a
+     phone. The drawings reuse the game's colours and shapes so they teach what will be seen. */
+  .intro {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px 28px;
+    margin-top: 32px;
+    max-width: 640px;
   }
-  .desc b { color: rgba(255, 255, 255, 0.85); font-weight: 600; }
+  .intro figure {
+    flex: 1 1 170px;
+    max-width: 200px;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .intro svg { width: 96px; height: 96px; overflow: visible; }
+  .intro figcaption {
+    font-size: 15px;
+    font-weight: 300;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  .intro b { color: rgba(255, 255, 255, 0.95); font-weight: 600; }
+  @media (max-width: 480px) {
+    .intro { gap: 14px 16px; margin-top: 24px; }
+    .intro figure { flex-basis: 140px; }
+    .intro svg { width: 72px; height: 72px; }
+    .intro figcaption { font-size: 14px; }
+  }
 </style>
 </head>
 <body>
@@ -200,10 +225,55 @@
   <div class="tag">click / space to play</div>
   <div id="start-best" class="label">&nbsp;</div>
   <button id="start-btn">START</button>
-  <div class="desc">You run the edges of a living mesh toward the gold marker; the game picks
-    the route. <b>Click</b> to dash: airborne, fast, untouchable, but the marker retreats and pays
-    half. Reach it without dashing for the full score. Enemies run the edges too; new kinds join
-    as you score.</div>
+  <button id="start-continue" class="quiet hidden">CONTINUE LAST RUN</button>
+  <div class="intro">
+    <figure>
+      <svg viewBox="0 0 96 96" aria-hidden="true" fill="none" stroke-linecap="round"
+        stroke-linejoin="round">
+        <g stroke="rgba(255,255,255,0.22)" stroke-width="1.2">
+          <path d="M4 30 L30 18 L58 26 L62 54 L36 70 L10 58 Z"/>
+          <path d="M30 18 L40 2 M58 26 L84 12 L92 40 L62 54 M36 70 L44 94 M10 58 L2 72 M62 54 L92 64"/>
+        </g>
+        <path d="M10 58 L36 70 L62 54 L92 40" stroke="#8cbeff" stroke-width="3.5"
+          stroke-dasharray="0 0" opacity="0.95"/>
+        <circle cx="92" cy="40" r="6" fill="#d6a94a"/>
+        <circle cx="92" cy="40" r="11" stroke="#d6a94a" stroke-width="1.5" opacity="0.5"/>
+        <circle cx="10" cy="58" r="5" fill="#ffffff"/>
+      </svg>
+      <figcaption>You run the edges toward the <b>gold marker</b>. The route is chosen for you
+        and redrawn as the mesh shifts.</figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 96 96" aria-hidden="true" fill="none" stroke-linecap="round">
+        <path d="M6 70 L90 70" stroke="rgba(255,255,255,0.22)" stroke-width="1.2"/>
+        <path d="M14 66 Q48 10 82 66" stroke="#5adcff" stroke-width="2.5" stroke-dasharray="5 6"
+          opacity="0.85"/>
+        <circle cx="14" cy="66" r="4" fill="rgba(255,255,255,0.35)"/>
+        <circle cx="48" cy="38" r="13" stroke="#5adcff" stroke-width="2.5" opacity="0.9"/>
+        <circle cx="48" cy="38" r="6" fill="#ffffff"/>
+        <circle cx="48" cy="70" r="4" fill="rgba(0,0,0,0.5)"/>
+        <path d="M66 70 L84 70 M78 64 L86 70 L78 76" stroke="#d6a94a" stroke-width="2"/>
+      </svg>
+      <figcaption><b>Click to dash</b>: airborne, fast, untouchable. The marker backs away and
+        pays half. Reach it without dashing for the full score.</figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 96 96" aria-hidden="true" fill="none">
+        <path d="M4 48 L92 48 M30 48 L22 90 M66 48 L78 6" stroke="rgba(255,255,255,0.22)"
+          stroke-width="1.2"/>
+        <circle cx="22" cy="48" r="7" fill="#ff7340"/>
+        <circle cx="30" cy="48" r="3.5" fill="#ff7340"/>
+        <circle cx="12" cy="45" r="2.5" fill="#ff7340" opacity="0.6"/>
+        <circle cx="6" cy="51" r="2" fill="#ff7340" opacity="0.4"/>
+        <circle cx="58" cy="48" r="8" stroke="#c7ff4d" stroke-width="3.5"/>
+        <circle cx="61" cy="48" r="3" fill="#c7ff4d"/>
+        <circle cx="76" cy="26" r="6" fill="#f259cc"/>
+        <circle cx="86" cy="19" r="2.5" fill="#f259cc"/>
+      </svg>
+      <figcaption><b>Enemies</b> run the edges too; touch one and the run ends. New kinds join
+        as you score.</figcaption>
+    </figure>
+  </div>
 </div>
 
 <div id="icons-left" class="hidden">

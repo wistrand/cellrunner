@@ -1,7 +1,8 @@
 // Browser-only ES module: Canvas2D renderer. Owns the canvas, DPR scaling and all drawing. It
 // reads the world object produced by world.js and knows nothing about rules.
 
-import { isAirborne, airProgress, pathReveal, TUNING } from "./world.js";
+import { isAirborne, airProgress, cooldownLeft, pathReveal, spawnProgress, TUNING }
+  from "./world.js";
 
 const COLORS = {
   bg: "#0b0d14",
@@ -198,7 +199,7 @@ export function createRenderer(canvas) {
 
     // Enemies: dark outline under the body so they read over hot cells, faded by distance from
     // the player. Lethal kinds are filled discs; board modifiers are hollow rings.
-    const er = cell * 0.085;
+    const erBase = cell * 0.085;
     const fadeNear = ENEMY_FADE_NEAR * cell;
     const fadeSpan = (ENEMY_FADE_FAR - ENEMY_FADE_NEAR) * cell;
     // A shape per kind around the heading (toX, toY) and the clock, as in GL without the glow:
@@ -228,6 +229,15 @@ export function createRenderer(canvas) {
       const ph = idx++ * 1.7;
       const x = en.x;
       const y = en.y;
+      // Spawn-in: a fresh or leashed-in enemy grows from a third of its size over spawnGrace,
+      // inside an expanding, fading ring in its colour, and cannot kill until it is full size.
+      const s = spawnProgress(world, en);
+      const er = erBase * (0.3 + 0.7 * s);
+      if (s < 1) {
+        ctx.globalAlpha = alpha * (1 - s);
+        ring(x, y, erBase * (1 + 3 * s), 1.5 * px, fill);
+        ctx.globalAlpha = alpha;
+      }
       if (en.kind === "hunter") {
         const sx = x + hx * er * 0.9;
         const sy = y + hy * er * 0.9;
@@ -334,6 +344,14 @@ export function createRenderer(canvas) {
       ctx.stroke();
       dot(player.x, player.y - lift * cell * 0.35, pr * (1 + 0.6 * lift), COLORS.player);
     } else {
+      // Landing cooldown: the dash ring stays after touchdown and shrinks into the player as
+      // the cooldown runs out, so the moment the next dash is allowed is visible.
+      const cd = cooldownLeft(world);
+      if (cd > 0) {
+        ctx.globalAlpha = 0.35 + 0.65 * cd;
+        ring(player.x, player.y, pr * (1 + 1.2 * cd), 2, COLORS.boost);
+        ctx.globalAlpha = 1;
+      }
       dot(player.x, player.y, pr, COLORS.player);
     }
 
