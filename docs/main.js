@@ -298,6 +298,13 @@ document.addEventListener("fullscreenchange", () => {
   ui.fsBtn.classList.toggle("fs", !!document.fullscreenElement);
 });
 
+// Phones grant audio on some gesture types and not others (iOS has favoured the release over
+// the press), so the context is nudged on every kind of gesture until it runs. `ensure` is a
+// state check once the context is running.
+for (const type of ["pointerup", "touchend", "click", "keyup"]) {
+  window.addEventListener(type, () => { if (audioOn) audio.ensure(); }, { passive: true });
+}
+
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   if (audioOn) audio.ensure();

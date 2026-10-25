@@ -81,6 +81,11 @@
 - **Create the AudioContext in a gesture, and only then.** `audio.ensure()` is called from the
   pointer and key handlers; `play` and `syncMusic` do nothing until a context exists. Calling
   `ensure` from the frame loop creates a suspended context on Safari that never plays.
+- **iOS output stays silent until a buffer source has played.** Oscillators alone never open it,
+  however many are scheduled. The SFX use buffers and the music does not, so on a phone the music
+  was heard only after the first dash or score. `ensure` plays one silent sample (`kick`) when
+  it creates or resumes the context, and `main.js` calls `ensure` on release gestures too
+  (pointerup, touchend, click, keyup), since iOS has granted audio on those and not on the press.
 - **Never anchor the first bar to a clock that may not be running.** On phones a context created
   or resumed in the starting gesture reports `currentTime` 0 and then jumps by the start-up
   latency; a bar anchored before the jump lands in the past and the stalled-tab skip drops it,

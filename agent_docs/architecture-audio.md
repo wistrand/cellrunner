@@ -60,7 +60,10 @@ the audio can be removed or swapped without touching `world.js`. `threat(world)`
 ## `audio.js`: the engine
 
 - `createAudio({ context })`. `ensure()` creates the AudioContext on first call and must run
-  inside a user gesture (`main.js` calls it from the pointer and key handlers). `play` is silent
+  inside a user gesture (`main.js` calls it from the pointer and key handlers, and from the
+  release events too, since iOS has granted audio on those and not on the press). Whenever it
+  creates or resumes a context it also plays one silent buffer sample (`kick`), because iOS keeps
+  the output silent until a buffer source has played, whatever oscillators run. `play` is silent
   until the context exists, so frames before the first gesture never create one. `context`
   injects an `OfflineAudioContext` for `renderOffline` (used by `docs/audio-test.html`).
 - Buses: SFX through a compressor to the destination; music on its own gain straight to the

@@ -54,8 +54,20 @@ export function createAudio({ context = null } = {}) {
   const leadParams = { energy: 0.5, density: 0.5 };
   let sfxVoices = 0;
 
+  // iOS unlock: WebKit keeps the output silent until a buffer source has played, however many
+  // oscillators are scheduled. The SFX use buffers and the music does not, so the music was heard
+  // only after the first dash. One silent sample, played in the gesture, opens the output.
+  function kick() {
+    const src = ctx.createBufferSource();
+    src.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    src.connect(ctx.destination);
+    src.start(0);
+    src.onended = () => src.disconnect();
+  }
+
   // Creates the context on the first call, which must come from a user gesture (Safari); later
-  // calls resume a suspended context. Returns the context, or null without Web Audio.
+  // calls resume a context that is not running and kick the output. Returns the context, or null
+  // without Web Audio.
   function ensure() {
     if (!ctx) {
       const Ctor = context ? null : window.AudioContext || window.webkitAudioContext;
@@ -87,12 +99,16 @@ export function createAudio({ context = null } = {}) {
         noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
         const data = noiseBuffer.getChannelData(0);
         for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        kick();
       } catch {
         ctx = null;
         return null;
       }
     }
-    if (ctx.state === "suspended" && !context) ctx.resume();
+    if (ctx.state !== "running" && !context) {
+      ctx.resume();
+      kick();
+    }
     return ctx;
   }
 
@@ -122,8 +138,9 @@ export function createAudio({ context = null } = {}) {
   // ---------------------------------------------------------------------------------------------
 
   // The ground under the player as voice weights, from params.biome and params.space, read per
-  // note so a border is heard within a bar. Same breakpoints as the GL biome ramp. `space` is
-  // the digital domain and wins over the biome weights, as it does on screen.
+  // note so a border is heard within a bar. Same breakpoints as the GL biome ramp, with linear
+  // blends where the shader smoothsteps (close enough for timbre). `space` is the digital domain
+  // and wins over the biome weights, as it does on screen.
   const TERRAIN = { space: 0, water: 0, trees: 0, snow: 0 };
   function terrain() {
     const b = params.biome;

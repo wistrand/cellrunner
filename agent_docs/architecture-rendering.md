@@ -42,7 +42,7 @@ Four programs, each with one interleaved dynamic buffer and a VAO, built by `pro
 
 | Program  | Draws                                      | Attributes                             |
 |----------|--------------------------------------------|----------------------------------------|
-| cells    | triangle fan per cell polygon              | pos, edge distance, heat, goal, player, tone |
+| cells    | triangle fan per cell polygon              | pos, edge distance, heat, goal, player, tone, biome, space, centre |
 | flat     | edge quads, route quads, overlay           | pos, rgba                              |
 | dots     | goal, enemies, edit flashes, player, glows | pos, uv, rgba, ring mode, softness     |
 | vignette | one clip-space quad, last                  | pos                                    |

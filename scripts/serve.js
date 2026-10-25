@@ -65,8 +65,10 @@ createServer(async (req, res) => {
     res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
     res.end(data);
   } catch (err) {
-    res.writeHead(err.code === "ENOENT" ? 404 : 500);
-    res.end(err.code === "ENOENT" ? "Not found" : "Server error");
+    // A missing file or a directory is a 404 (no directory listings); anything else is ours.
+    const missing = err.code === "ENOENT" || err.code === "EISDIR" || err.code === "ENOTDIR";
+    res.writeHead(missing ? 404 : 500);
+    res.end(missing ? "Not found" : "Server error");
   }
 }).listen(PORT, () => {
   console.log(`CELLRUNNER dev server: http://localhost:${PORT}/`);
