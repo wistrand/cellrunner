@@ -72,8 +72,11 @@ the audio can be removed or swapped without touching `world.js`. `threat(world)`
   fresh song gain.
 - Scheduler: a `setTimeout` loop every `TICK_MS` on the context clock. A bar is rendered and
   scheduled when its start comes within `LOOKAHEAD`, so parameter and layer changes take effect
-  at the next bar line. Bars that would start in the past are skipped. A hidden tab halts the
-  loop; it resumes at the next bar if music is still wanted. `pauseMusic` halts the loop and
+  at the next bar line. Bars that would start in the past are skipped, except before the first
+  bar of a run has gone out, when the loop re-anchors instead; and the first bar is anchored on
+  the first tick that sees the context running, not in `run`, because a phone's context clock
+  can jump at start-up (see gotchas). A hidden tab halts the loop; it resumes at the next bar
+  if music is still wanted. `pauseMusic` halts the loop and
   fades the song gain but keeps the bar position and the piece; `resumeMusic` continues from
   that bar. A tab un-hide never resumes a paused piece. `main.js` calls these from the game's
   pause, so pausing silences the music and resuming picks it up where it stopped.

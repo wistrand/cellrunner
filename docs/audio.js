@@ -37,6 +37,8 @@ export function createAudio({ context = null } = {}) {
   let piece = null;
   let wanted = false; // the caller wants music (survives tab hide)
   let pausedMusic = false; // pauseMusic() holds the piece; a tab un-hide must not restart it
+  let anchored = false;    // run() anchors the first bar on the first tick with a running clock
+  let scheduledAny = false; // a bar has been scheduled since run(); before that, never skip
   let running = false; // the scheduler loop is active
   let timer = null;
   let nextBar = 0;
@@ -322,11 +324,25 @@ export function createAudio({ context = null } = {}) {
   function tick() {
     timer = null;
     if (!running || !ctx) return;
+    // Wait for the clock: nothing scheduled against a context that is not running yet would
+    // land where it was aimed.
+    if (ctx.state !== "running") {
+      timer = setTimeout(tick, TICK_MS);
+      return;
+    }
     const now = ctx.currentTime;
-    // A stalled tab: skip bars that would start in the past.
+    if (!anchored) {
+      nextBarTime = now + 0.1;
+      anchored = true;
+    }
+    // A stalled tab: skip bars that would start in the past. Not before the first bar of this
+    // run has gone out: if the clock jumped between anchoring and now, re-anchor instead, so the
+    // piece starts on its first bar rather than its second.
+    if (!scheduledAny && nextBarTime < now + 0.02) nextBarTime = now + 0.1;
     while (nextBarTime < now + 0.02) { nextBar++; nextBarTime += barSec(); }
     while (nextBarTime < now + LOOKAHEAD) {
       scheduleBar(nextBar, nextBarTime);
+      scheduledAny = true;
       nextBar++;
       nextBarTime += barSec();
     }
@@ -396,7 +412,11 @@ export function createAudio({ context = null } = {}) {
     if (running || !piece || !ensure()) return;
     if (!songBus) newSong();
     running = true;
-    nextBarTime = ctx.currentTime + 0.1;
+    // The first bar is anchored in tick(), not here: a context created or resumed in this very
+    // gesture may report a clock at 0 that then jumps ahead by the start-up latency (phones),
+    // and a bar anchored to the early reading would land in the past and be skipped.
+    anchored = false;
+    scheduledAny = false;
     tick();
   }
   function halt() {

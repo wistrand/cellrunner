@@ -81,6 +81,11 @@
 - **Create the AudioContext in a gesture, and only then.** `audio.ensure()` is called from the
   pointer and key handlers; `play` and `syncMusic` do nothing until a context exists. Calling
   `ensure` from the frame loop creates a suspended context on Safari that never plays.
+- **Never anchor the first bar to a clock that may not be running.** On phones a context created
+  or resumed in the starting gesture reports `currentTime` 0 and then jumps by the start-up
+  latency; a bar anchored before the jump lands in the past and the stalled-tab skip drops it,
+  so the music began a bar late. `tick` waits for `state === "running"`, anchors on its first
+  running tick, and re-anchors instead of skipping until a bar has actually been scheduled.
 - **Music bypasses the compressor.** Routing it through the SFX compressor clicked on downbeats
   in astrocatch. Keep the two buses separate.
 - **Audio envelopes are linear ramps ending at exactly 0.** Exponential ramps cannot reach 0 and
