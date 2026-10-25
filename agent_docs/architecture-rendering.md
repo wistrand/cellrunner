@@ -38,13 +38,14 @@ visible world rectangle in GL and is drawn in screen space in 2D.
 
 ## WebGL2 renderer
 
-Three programs, each with one interleaved dynamic buffer and a VAO, built by `program`:
+Four programs, each with one interleaved dynamic buffer and a VAO, built by `program`:
 
-| Program | Draws                                      | Attributes                             |
-|---------|--------------------------------------------|----------------------------------------|
-| cells   | triangle fan per cell polygon              | pos, edge distance, heat, goal, player, tone |
-| flat    | edge quads, route quads, overlay           | pos, rgba                              |
-| dots    | goal, enemies, edit flashes, player, glows | pos, uv, rgba, ring mode, softness     |
+| Program  | Draws                                      | Attributes                             |
+|----------|--------------------------------------------|----------------------------------------|
+| cells    | triangle fan per cell polygon              | pos, edge distance, heat, goal, player, tone |
+| flat     | edge quads, route quads, overlay           | pos, rgba                              |
+| dots     | goal, enemies, edit flashes, player, glows | pos, uv, rgba, ring mode, softness     |
+| vignette | one clip-space quad, last                  | pos                                    |
 
 Geometry is rebuilt every frame into `Writer` instances (growable `Float32Array`s that double
 when full and are reused after warm-up), then uploaded with `bufferData(DYNAMIC_DRAW)`. The
@@ -84,6 +85,9 @@ diagram changes every frame anyway, so there is nothing to cache.
   from the player, from full inside `ENEMY_FADE_NEAR` cells to `ENEMY_FADE_MIN` at
   `ENEMY_FADE_FAR`, so a far crowd does not compete with the near ones.
 - **Death overlay** is one flat quad covering the screen.
+- **Vignette** is drawn last by its own program: a static clip-space quad whose fragment alpha
+  rises with distance from the screen centre (`COLORS.vignette` is the colour and max alpha). It
+  ignores the camera, so it never moves with the board.
 
 Blending is standard alpha; depth test off. Projection is a uniform resolution and a small
 `project()` in the shared vertex prelude, so all geometry is in CSS pixels like the world.
@@ -96,8 +100,9 @@ segment by segment with alpha fading toward the goal, then the goal (beacon ring
 orbiting sparks and dot, as in GL without the halo), enemy dots, the player's trail and heading
 chevron, expanding rings for recent
 board edits from `world.flashes`, and the player. Airborne the player is drawn raised along a
-parabola in `airProgress(world)` with a ground shadow and a boost ring. Kept intentionally
-simple; it exists so the game runs everywhere.
+parabola in `airProgress(world)` with a ground shadow and a boost ring. A radial gradient built
+once in unit space and drawn under a scaling transform is the vignette, last, with the same
+falloff as the GL shader. Kept intentionally simple; it exists so the game runs everywhere.
 
 ## Colour roles
 

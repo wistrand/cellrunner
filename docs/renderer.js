@@ -10,7 +10,8 @@ const COLORS = {
   hot: [140, 30, 50],
   goalCell: [107, 84, 33],  // RGB; blended in around the goal
   playerCell: [51, 77, 117], // RGB; blended in around the player
-  edgeAlpha: [0.07, 0.22], // edge line alpha at tone 0 and tone 1
+  edgeAlpha: [0.02, 0.07], // edge line alpha at tone 0 and tone 1
+  vignetteAlpha: 0.35,     // screen-space darkening toward the corners; the max alpha
   route: [140, 190, 255, 0.95], // RGBA; alpha fades along the route
   goal: "#d6a94a",
   hunter: "#ff7340",
@@ -41,6 +42,12 @@ export function createRenderer(canvas) {
   let width = 0;
   let height = 0;
   let dpr = 1;
+  // Vignette in a unit space (the viewport is [-1, 1] on both axes, so the falloff is
+  // elliptical and follows the screen), drawn under a scaling transform. Radii match the GL
+  // shader's smoothstep on r squared: 0.35 and 1.6.
+  const vignette = ctx.createRadialGradient(0, 0, Math.sqrt(0.35), 0, 0, Math.sqrt(1.6));
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, `rgba(0,0,0,${COLORS.vignetteAlpha})`);
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -102,7 +109,7 @@ export function createRenderer(canvas) {
     const [ea0, ea1] = COLORS.edgeAlpha;
     for (let k = 0; k < EDGE_BUCKETS; k++) {
       const t = (k + 0.5) / EDGE_BUCKETS;
-      ctx.lineWidth = (0.6 + 0.5 * t) * px;
+      ctx.lineWidth = (0.4 + 0.4 * t) * px;
       ctx.strokeStyle = `rgba(255,255,255,${(ea0 + (ea1 - ea0) * t).toFixed(3)})`;
       ctx.beginPath();
       for (const e of graph.edges.values()) {
@@ -256,6 +263,10 @@ export function createRenderer(canvas) {
       ctx.fillStyle = "rgba(11,13,20,0.55)";
       ctx.fillRect(0, 0, width, height);
     }
+
+    ctx.setTransform(dpr * width / 2, 0, 0, dpr * height / 2, dpr * width / 2, dpr * height / 2);
+    ctx.fillStyle = vignette;
+    ctx.fillRect(-1, -1, 2, 2);
   }
 
   resize();

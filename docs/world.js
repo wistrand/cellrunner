@@ -24,15 +24,15 @@ export const TUNING = {
   // weights normalised when sampled. A kind stays at 0 until the first row that gives it weight,
   // so its `at` is the goal it can first appear; `spawnKind` guarantees it does appear then.
   spawnTable: [
-    { at: 0, spawn: 1.0, speed: 1.0, hunter: 40, wanderer: 60, stalker: 0, splitter: 0, joiner: 0 },
-    { at: 4, spawn: 0.6, speed: 1.0, hunter: 40, wanderer: 60, stalker: 0, splitter: 0, joiner: 0 },
-    { at: 5, spawn: 0.6, speed: 1.0, hunter: 40, wanderer: 45, stalker: 15, splitter: 0, joiner: 0 },
-    { at: 10, spawn: 0.5, speed: 1.0, hunter: 36, wanderer: 36, stalker: 18, splitter: 10, joiner: 0 },
-    { at: 16, spawn: 0.5, speed: 1.0, hunter: 32, wanderer: 30, stalker: 20, splitter: 10, joiner: 8 },
-    { at: 30, spawn: 0.5, speed: 1.1, hunter: 30, wanderer: 25, stalker: 22, splitter: 12, joiner: 11 },
-    { at: 60, spawn: 0.5, speed: 1.3, hunter: 30, wanderer: 25, stalker: 22, splitter: 12, joiner: 11 },
+    { at: 0, spawn: 0.5, speed: 1.0, hunter: 40, wanderer: 60, stalker: 0, splitter: 0, joiner: 0 },
+    { at: 7, spawn: 0.5, speed: 1.0, hunter: 40, wanderer: 60, stalker: 0, splitter: 0, joiner: 0 },
+    { at: 8, spawn: 0.5, speed: 1.0, hunter: 40, wanderer: 45, stalker: 15, splitter: 0, joiner: 0 },
+    { at: 15, spawn: 0.4, speed: 1.0, hunter: 36, wanderer: 36, stalker: 18, splitter: 10, joiner: 0 },
+    { at: 24, spawn: 0.4, speed: 1.0, hunter: 32, wanderer: 30, stalker: 20, splitter: 10, joiner: 8 },
+    { at: 45, spawn: 0.4, speed: 1.1, hunter: 30, wanderer: 25, stalker: 22, splitter: 12, joiner: 11 },
+    { at: 90, spawn: 0.4, speed: 1.3, hunter: 30, wanderer: 25, stalker: 22, splitter: 12, joiner: 11 },
   ],
-  enemiesStart: 4,     // rolled from the table's first row (hunters and wanderers)
+  enemiesStart: 2,     // rolled from the table's first row (hunters and wanderers)
   spawnStartMinDist: 4.5, // cells; the start roster spawns at least this far, behind the player
   interceptLead: 2.5,  // cells ahead along the player's path that stalkers aim for
   enemiesMax: 22,

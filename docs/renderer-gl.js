@@ -20,8 +20,8 @@ const COLORS = {
   goalRim: [1.0, 0.82, 0.4],
   playerCell: [0.2, 0.3, 0.46],  // cell tint around the player
   playerRim: [0.75, 0.9, 1.0],
-  edge: [1, 1, 1, 0.07],         // edge lines at tone 0; alpha rises to edgeAlphaB at tone 1
-  edgeAlphaB: 0.22,
+  edge: [1, 1, 1, 0.02],         // edge lines at tone 0; alpha rises to edgeAlphaB at tone 1
+  edgeAlphaB: 0.07,
   route: [0.55, 0.75, 1, 0.95],
   routeHalo: [0.47, 0.67, 1, 0.22],
   goal: [0.84, 0.66, 0.29, 1],
@@ -44,6 +44,7 @@ const COLORS = {
   boostGlow: [0.35, 0.86, 1, 0.45],
   shadow: [0, 0, 0, 0.5],
   dim: [0.043, 0.051, 0.078, 0.55],
+  vignette: [0, 0, 0, 0.35],     // screen-space darkening toward the corners; alpha is the max
 };
 
 // Camera: world -> screen is (p - u_cam) * u_scale + res / 2, in CSS pixels.
@@ -120,8 +121,8 @@ void main() {
   // is mostly the soft band; dense ground (tone 1) is mostly the crisp line.
   float wide = 1.0 - smoothstep(0.0, mix(22.0, 12.0, tone) / u_zoom, v_edge);
   float tight = 1.0 - smoothstep(0.0, 1.5 / u_zoom, v_edge);
-  float wideK = mix(0.45, 0.15, tone);
-  float tightK = mix(0.12, 0.5, tone);
+  float wideK = mix(0.30, 0.10, tone);
+  float tightK = mix(0.06, 0.20, tone);
   vec3 rim0 = mix(u_rim, u_rimB, tone);
   vec3 rim = mix(mix(mix(rim0, u_goalRim, goal), u_playerRim, ply), u_hotRim, heat);
   // Pulse: cells with enemies on them breathe; cells around the player breathe harder and
@@ -150,6 +151,29 @@ precision mediump float;
 in vec4 v_color;
 out vec4 o;
 void main() { o = v_color; }
+`;
+
+// Vignette: one clip-space quad over the whole screen, transparent at the centre and darkening
+// toward the corners. Ignores the camera, so it never moves with the board.
+const VIGNETTE_VS = `#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main() {
+  v_uv = a_pos;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+`;
+const VIGNETTE_FS = `#version 300 es
+precision mediump float;
+uniform vec4 u_color;
+in vec2 v_uv;
+out vec4 o;
+void main() {
+  // Elliptical falloff that follows the viewport: r2 is 0 at the centre, 1 at the edge
+  // midpoints and 2 at the corners.
+  float r2 = dot(v_uv, v_uv);
+  o = vec4(u_color.rgb, u_color.a * smoothstep(0.35, 1.6, r2));
+}
 `;
 
 // Dots: one quad each, circle in the fragment shader. a_ring < 0 draws a soft glow, 0 a filled
@@ -266,12 +290,14 @@ export function createRendererGL(canvas) {
   let cells;
   let flat;
   let dots;
+  let vignette;
   try {
     cells = program(gl, CELL_VS, CELL_FS,
       [["a_pos", 2], ["a_edge", 1], ["a_heat", 1], ["a_goal", 1], ["a_player", 1], ["a_tone", 1]]);
     flat = program(gl, FLAT_VS, FLAT_FS, [["a_pos", 2], ["a_color", 4]]);
     dots = program(gl, DOT_VS, DOT_FS,
       [["a_pos", 2], ["a_uv", 2], ["a_color", 4], ["a_ring", 1], ["a_soft", 1]]);
+    vignette = program(gl, VIGNETTE_VS, VIGNETTE_FS, [["a_pos", 2]]);
   } catch (err) {
     console.warn("renderer-gl:", err.message);
     return null;
@@ -308,6 +334,12 @@ export function createRendererGL(canvas) {
   const edgeW = new Writer(1 << 14);
   const routeW = new Writer(1 << 12);
   const dotW = new Writer(1 << 12);
+  // The vignette quad never changes: two clip-space triangles, colour set once.
+  const vignetteW = new Writer(12);
+  vignetteW.data.set([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]);
+  vignetteW.n = 12;
+  gl.useProgram(vignette.p);
+  gl.uniform4f(gl.getUniformLocation(vignette.p, "u_color"), ...COLORS.vignette);
 
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -488,7 +520,7 @@ export function createRendererGL(canvas) {
       const b = graph.nodes.get(e.b);
       const t = edgeTone(world, e);
       ec[3] = COLORS.edge[3] + (COLORS.edgeAlphaB - COLORS.edge[3]) * t;
-      quad(edgeW, a.x, a.y, b.x, b.y, (0.3 + 0.3 * t) * px, ec);
+      quad(edgeW, a.x, a.y, b.x, b.y, (0.2 + 0.2 * t) * px, ec);
     }
     // The smoothed path, player first, fading toward the goal. A wide faint halo under a bright
     // core keeps it readable over glowing cells.
@@ -596,6 +628,8 @@ export function createRendererGL(canvas) {
       quad(edgeW, cam.x - hw, cam.y, cam.x + hw, cam.y, hh, COLORS.dim);
       drawProgram(flat, edgeW);
     }
+
+    drawProgram(vignette, vignetteW);
   }
 
   resize();

@@ -9,6 +9,7 @@ first, then the relevant file in `agent_docs/`.
 ```
 docs/
   index.html       # tiny shell: DOM + CSS + one <script type="module">
+  CNAME            # GitHub Pages custom domain: cellrunner.live
   main.js          # browser-only: input, RAF loop, HUD, best score, renderer selection
   renderer-gl.js   # browser-only: WebGL2 renderer (default)
   renderer.js      # browser-only: Canvas2D renderer (fallback, or ?gl=0)
@@ -33,8 +34,8 @@ README.md          # human-facing
 CLAUDE.md          # this file (AGENTS.md is a symlink to it)
 ```
 
-Everything the browser needs is under `docs/`, GitHub Pages-ready via the `/docs` folder. All
-non-browser tooling lives under `scripts/`.
+Everything the browser needs is under `docs/`, served by GitHub Pages from the `/docs` folder at
+https://cellrunner.live. All non-browser tooling lives under `scripts/`.
 
 ## Commands
 

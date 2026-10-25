@@ -232,7 +232,10 @@ window.addEventListener("keydown", (e) => {
     if (audioOn) audio.toggleMute();
   } else if (e.key === " " || e.key === "Enter") {
     e.preventDefault();
-    act(performance.now());
+    // On the game-over sheet the keys continue the run (same board, score from zero) once the
+    // delay has passed; a click there restarts. Elsewhere they start or dash.
+    if (state === "over") continueRun();
+    else act(performance.now());
   }
 });
 

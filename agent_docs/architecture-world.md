@@ -110,7 +110,7 @@ distances for hunters, the intercept distances for stalkers, or picks a random n
 edge for everyone else. Five kinds. Difficulty follows `spawnTable`, keyed by goals reached as
 astrocatch's spawn table is keyed by captures; columns interpolate between rows and plateau past
 the last. `spawn` is enemies per goal (`spawnDebt` accumulates fractions, so 0.5 is one every
-other goal), `speed` multiplies `enemySpeed` (`difficultyAt`), and the kind columns are spawn
+other goal; the table starts there and eases to 0.4), `speed` multiplies `enemySpeed` (`difficultyAt`), and the kind columns are spawn
 weights (`spawnWeightsAt`): a kind stays at zero until the first row that gives it weight, and
 `spawnKind` makes a kind's first spawn after its weight turns on that kind, so stalkers,
 splitters and joiners debut at known goals. The start roster (`enemiesStart`) is rolled from the
