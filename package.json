@@ -1,0 +1,10 @@
+{
+  "name": "cellrunner",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node scripts/voronoi-test.js && node scripts/graph-test.js && node scripts/world-test.js && node scripts/music-test.js && node scripts/events-test.js"
+  }
+}

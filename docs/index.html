@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>CELLRUNNER</title>
+<meta name="description" content="Run the edges of a living Voronoi mesh. Click to dash. No install.">
+<meta name="theme-color" content="#0b0d14">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><polygon points='16,2 29,10 26,26 8,28 3,12' fill='%233b6ee0'/></svg>">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0b0d14;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+  /* Fixed-width slots with tabular digits, so a change in one reading never shifts the others. */
+  #hud {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    display: flex;
+    justify-content: center;
+    gap: 1.2em;
+    font-size: 18px;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.8;
+    pointer-events: none;
+  }
+  #hud span { white-space: nowrap; text-align: left; }
+  #hud-score { min-width: 9ch; }
+  #hud-next { min-width: 8ch; }
+  #hud-best { min-width: 8ch; }
+  #hud-dash { min-width: 10ch; }
+  #hud-sound { min-width: 9ch; }
+  #hud.hidden { display: none; }
+  @media (max-width: 480px) {
+    #hud { font-size: 14px; gap: 0.8em; }
+  }
+
+  /* Overlays (start, game over): a translucent, blurred sheet over the live field. Top-aligned
+     with generous padding so the stack never jumps when a child grows; overflow hidden so a
+     short viewport trims the description rather than scrolling. */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: max(48px, env(safe-area-inset-top) + 24px) 16px
+             max(24px, env(safe-area-inset-bottom) + 12px);
+    overflow: hidden;
+    background: rgba(11, 13, 20, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: opacity 0.35s;
+    text-align: center;
+  }
+  .overlay > * { flex-shrink: 0; }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  /* The game-over sheet is more transparent so the board behind it stays readable. */
+  #gameover {
+    background: rgba(11, 13, 20, 0.4);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+  h1 {
+    font-size: clamp(32px, 10vw, 56px); /* ten letters must fit a phone width */
+    font-weight: 750;
+    letter-spacing: 0.06em;
+    margin: 0;
+    background: linear-gradient(115deg, #8cbeff, #d6a94a, #4debbf);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .tag {
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 300;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.4);
+  }
+  .label {
+    margin-top: 18px;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.55);
+  }
+  .big {
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #fff;
+  }
+  button {
+    margin-top: 22px;
+    padding: 12px 40px;
+    border: none;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    color: #0b0d14;
+    background: linear-gradient(115deg, #8cbeff, #4debbf);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button.quiet {
+    margin-top: 12px;
+    color: #fff;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+  }
+  button:hover { filter: brightness(1.1); }
+  .keys {
+    margin-top: 10px;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.35);
+  }
+  @media (pointer: coarse) { .keys { display: none; } }
+  .desc {
+    margin-top: 36px;
+    max-width: 360px;
+    font-size: 13px;
+    font-weight: 300;
+    line-height: 1.65;
+    color: rgba(255, 255, 255, 0.55);
+  }
+  .desc b { color: rgba(255, 255, 255, 0.85); font-weight: 600; }
+</style>
+</head>
+<body>
+<canvas id="field"></canvas>
+<div id="hud" class="hidden">
+  <span id="hud-score"></span><span id="hud-next"></span><span id="hud-best"></span>
+  <span id="hud-dash"></span><span id="hud-sound"></span>
+</div>
+
+<div id="start" class="overlay">
+  <h1>CELLRUNNER</h1>
+  <div class="tag">click / space to play</div>
+  <div id="start-best" class="label">&nbsp;</div>
+  <button id="start-btn">START</button>
+  <div class="desc">You run the edges of a living mesh toward the gold marker; the game picks
+    the route. <b>Click</b> to dash: airborne, fast, untouchable, but the marker retreats and pays
+    half. Reach it without dashing for the full score. Enemies run the edges too; new kinds join
+    as you score.</div>
+</div>
+
+<div id="gameover" class="overlay hidden">
+  <div class="tag">caught</div>
+  <div id="over-score" class="big">0</div>
+  <div id="over-line" class="label">0 goals · best 0</div>
+  <button id="restart-btn">RESTART</button>
+  <button id="continue-btn" class="quiet">CONTINUE</button>
+  <div class="keys">R restart · C continue · click or space restart</div>
+</div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>

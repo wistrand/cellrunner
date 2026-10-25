@@ -1,0 +1,139 @@
+<!doctype html>
+<!-- Development page for the audio engine (agent_docs/plan-audio.md): plays the seeded music
+     from music.js through audio.js and tries the game sounds and the threat pulse. Not linked from the game.
+     ?seed=N picks the piece; ?autostart=1 starts without a click (headless checks, with the
+     browser's autoplay policy relaxed). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cellrunner audio test</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; background: #111; color: #ddd; margin: 0; padding: 16px; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    fieldset { border: 1px solid #333; margin: 0 0 12px; padding: 8px 12px; }
+    legend { color: #999; }
+    button { font: inherit; padding: 6px 12px; margin: 2px; background: #2a2a2a; color: #ddd; border: 1px solid #444; border-radius: 6px; }
+    label { margin-right: 12px; }
+    input[type="number"] { width: 7em; }
+    #info { font-family: ui-monospace, monospace; white-space: pre; color: #9c9; }
+  </style>
+</head>
+<body>
+  <h1>cellrunner audio test</h1>
+  <fieldset>
+    <legend>Music</legend>
+    <label>Seed <input type="number" id="seed" value="1"></label>
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
+    <button id="cadence">Stop on a cadence</button>
+    <button id="mute">Mute</button>
+    <div>
+      <label><input type="checkbox" data-layer="pad" checked> pad</label>
+      <label><input type="checkbox" data-layer="bass" checked> bass</label>
+      <label><input type="checkbox" data-layer="arp" checked> arp</label>
+      <label><input type="checkbox" data-layer="lead" checked> lead</label>
+    </div>
+    <label>Energy <input type="range" id="energy" min="0" max="1" step="0.05" value="0.5"></label>
+    <label>Density <input type="range" id="density" min="0" max="1" step="0.05" value="0.5"></label>
+    <label>Open <input type="range" id="open" min="0" max="1" step="0.05" value="0"></label>
+  </fieldset>
+  <fieldset>
+    <legend>Game sounds</legend>
+    <button data-event="score">score</button>
+    <button data-event="dashStart">dashStart</button>
+    <button data-event="dashEnd">dashEnd</button>
+    <button data-event="split" data-pan="-0.8">split (left)</button>
+    <button data-event="join" data-pan="0.8">join (right)</button>
+    <button data-event="death">death</button>
+    <button id="burst">30 voices at once (cap)</button>
+    <div><label>Threat <input type="range" id="threat" min="0" max="1" step="0.05" value="0"></label></div>
+  </fieldset>
+  <div id="info">Press Start (audio needs a click).</div>
+  <script type="module">
+    import { createAudio } from "./audio.js";
+    import { composeRun } from "./music.js";
+
+    const $ = (id) => document.getElementById(id);
+    const audio = createAudio();
+    const q = new URLSearchParams(location.search);
+    if (q.has("seed")) $("seed").value = q.get("seed");
+    const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    let piece = null;
+
+    function start() {
+      piece = composeRun(Number($("seed").value) >>> 0);
+      audio.ensure();
+      audio.startMusic(piece);
+    }
+    $("start").onclick = start;
+    $("stop").onclick = () => audio.stopMusic();
+    $("cadence").onclick = () => audio.stopMusic({ fade: 0.4, cadence: true });
+    $("mute").onclick = () => { $("mute").textContent = audio.toggleMute() ? "Unmute" : "Mute"; };
+    $("mute").textContent = audio.isMuted() ? "Unmute" : "Mute";
+    for (const el of document.querySelectorAll("[data-layer]")) {
+      el.onchange = () => audio.setMusicParams({ layers: { [el.dataset.layer]: el.checked } });
+    }
+    $("energy").oninput = (e) => audio.setMusicParams({ energy: +e.target.value });
+    $("density").oninput = (e) => audio.setMusicParams({ density: +e.target.value });
+    $("open").oninput = (e) => audio.setMusicParams({ open: +e.target.value });
+
+    for (const el of document.querySelectorAll("[data-event]")) {
+      el.onclick = () => { audio.ensure(); audio.play({ type: el.dataset.event, x: 0, y: 0, pan: +(el.dataset.pan || 0) }); };
+    }
+    $("threat").oninput = (e) => audio.setThreat(+e.target.value);
+    $("burst").onclick = () => { for (let i = 0; i < 30; i++) audio.tone({ freq: 300 + i * 40, gain: 0.02, dur: 0.4 }); };
+
+    setInterval(() => {
+      const ctx = audio.context();
+      if (!piece || !ctx) return;
+      const chord = audio.currentChord(4);
+      $("info").textContent =
+        `seed ${piece.seed}: ${NAMES[piece.key]} ${piece.scale}, ${piece.bpm} BPM, bass ${piece.bassFeel}, arp ${piece.arpDir}\n` +
+        `progressions A ${piece.progressions[0].join("-")}  B ${piece.progressions[1].join("-")}\n` +
+        `context ${ctx.state} t=${ctx.currentTime.toFixed(2)}  chord ${chord ? chord.map((p) => NAMES[p % 12]).join(" ") : "-"}\n` +
+        `SFX voices ${audio.activeSfxVoices()}  output latency ${(audio.outputLatency() * 1000).toFixed(0)} ms  ${audio.isMuted() ? "MUTED" : ""}`;
+    }, 200);
+
+    if (q.get("autostart") === "1") {
+      try { start(); } catch (e) { console.log("audio-test start failed:", e.message); }
+      // For headless checks: report the engine state after a few seconds.
+      setTimeout(() => {
+        const ctx = audio.context();
+        console.log("audio-test", JSON.stringify({
+          context: ctx ? ctx.state : null, time: ctx ? +ctx.currentTime.toFixed(2) : null,
+          sampleRate: ctx ? ctx.sampleRate : null, chord: audio.currentChord(4), grid: audio.nextGridTime(4),
+        }));
+      }, 3000);
+    }
+    // ?offline=N: render N bars of the piece offline and report level and the largest
+    // sample-to-sample jump (a click shows as a jump far above the music's own).
+    if (q.has("offline")) {
+      const bars = Number(q.get("offline")) || 8;
+      const p = composeRun(Number($("seed").value) >>> 0);
+      const sr = 48000;
+      const secs = (bars * 4 * 60) / p.bpm + 1;
+      const off = new OfflineAudioContext(2, Math.ceil(secs * sr), sr);
+      createAudio({ context: off }).renderOffline(p, bars).then((buf) => {
+        let peak = 0, sum = 0, jump = 0, jumpAt = 0;
+        for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+          const d = buf.getChannelData(ch);
+          for (let i = 1; i < d.length; i++) {
+            const a = Math.abs(d[i]);
+            if (a > peak) peak = a;
+            sum += d[i] * d[i];
+            const j = Math.abs(d[i] - d[i - 1]);
+            if (j > jump) { jump = j; jumpAt = i / sr; }
+          }
+        }
+        const rms = Math.sqrt(sum / (buf.length * buf.numberOfChannels));
+        const result = { seed: p.seed, bars, seconds: +buf.duration.toFixed(2), peak: +peak.toFixed(3),
+          rmsDb: +(20 * Math.log10(rms)).toFixed(1), maxJump: +jump.toFixed(4), maxJumpAt: +jumpAt.toFixed(3) };
+        console.log("audio-offline", JSON.stringify(result));
+        $("info").textContent = "offline " + JSON.stringify(result);
+      }, (e) => console.log("audio-offline failed:", e.message));
+    }
+    window.__cellrunnerAudio = { audio, get piece() { return piece; } };
+  </script>
+</body>
+</html>
