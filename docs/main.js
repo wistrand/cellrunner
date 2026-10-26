@@ -33,6 +33,11 @@ const ui = {
   icons: document.getElementById("icons"),
   iconsLeft: document.getElementById("icons-left"),
   fsBtn: document.getElementById("fs-btn"),
+  helpBtn: document.getElementById("help-btn"),
+  help: document.getElementById("help"),
+  helpV: document.getElementById("help-v"),
+  helpSwitch: document.getElementById("help-switch"),
+  startHelp: document.getElementById("start-help"),
   muteBtn: document.getElementById("mute-btn"),
   pauseBtn: document.getElementById("pause-btn"),
   paused: document.getElementById("paused"),
@@ -58,6 +63,7 @@ function makeRenderer(wantGL, reuseCanvas = false) {
   const gl = wantGL && GL_OK ? createRendererGL(canvas) : null;
   renderer = gl || createRenderer2D(canvas);
   glMode = !!gl;
+  updateHelpSwitch();
   renderer.resize();
   if (world) setView(world, renderer.width, renderer.height);
 }
@@ -204,6 +210,31 @@ function setPaused(on) {
   } else {
     audio.resumeMusic();
   }
+}
+
+// Help: the controls sheet. Opening it during play pauses the game and stands in for the pause
+// sheet; closing it leaves the game paused for the player to resume. Works from the start sheet
+// too (it is a later sibling, so it sits on top). The renderer row is hidden without WebGL2.
+let helpOpen = false;
+function openHelp() {
+  if (helpOpen) return;
+  helpOpen = true;
+  if (state === "play") setPaused(true);
+  show(ui.paused, false);
+  show(ui.helpV, GL_OK);
+  updateHelpSwitch();
+  show(ui.help, true);
+}
+// The switch button in the help sheet names the renderer it would switch to, so the current one
+// is implied; it is the touch equivalent of V.
+function updateHelpSwitch() {
+  ui.helpSwitch.textContent = glMode ? "use Canvas2D" : "use WebGL2";
+}
+function closeHelp() {
+  if (!helpOpen) return;
+  helpOpen = false;
+  show(ui.help, false);
+  if (paused) show(ui.paused, true);
 }
 
 // The AudioContext needs a user gesture, so the music of the first game starts on the first
@@ -386,6 +417,27 @@ ui.fsBtn.addEventListener("click", (e) => {
   e.currentTarget.blur();
   toggleFullscreen();
 });
+
+// Help: the icon, the link on the start sheet, and a click on the sheet itself to close it.
+ui.helpBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+ui.helpBtn.addEventListener("click", (e) => {
+  e.currentTarget.blur();
+  if (helpOpen) closeHelp();
+  else openHelp();
+});
+ui.startHelp.addEventListener("click", (e) => {
+  e.preventDefault();
+  openHelp();
+});
+ui.help.addEventListener("pointerdown", (e) => {
+  if (e.button === 0) closeHelp();
+});
+// The renderer switch inside the help sheet: stops its pointerdown so the sheet stays open.
+ui.helpSwitch.addEventListener("pointerdown", (e) => e.stopPropagation());
+ui.helpSwitch.addEventListener("click", (e) => {
+  e.currentTarget.blur();
+  if (GL_OK) makeRenderer(!glMode);
+});
 document.addEventListener("fullscreenchange", () => {
   ui.fsBtn.classList.toggle("fs", !!document.fullscreenElement);
 });
@@ -400,7 +452,14 @@ for (const type of ["pointerup", "touchend", "click", "keyup"]) {
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   if (audioOn) audio.ensure();
-  if (e.key === "r" || e.key === "R") {
+  // With the help sheet up, only the keys that close it count; nothing reaches the game.
+  if (helpOpen) {
+    if (e.key === "h" || e.key === "H" || e.key === "?" || e.key === "Escape") closeHelp();
+    return;
+  }
+  if (e.key === "h" || e.key === "H" || e.key === "?") {
+    openHelp();
+  } else if (e.key === "r" || e.key === "R") {
     if (state !== "start") startRun(randomSeed());
   } else if (e.key === "c" || e.key === "C") {
     if (state === "over") continueRun();

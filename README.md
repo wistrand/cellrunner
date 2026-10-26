@@ -36,6 +36,8 @@ No install, no build, no dependencies. Plain ES modules and a Canvas2D renderer.
 - **P** or the pause icon pauses the game and the music; P, Space or a click resumes. A hidden
   tab pauses too.
 - **F** or the corner icon toggles fullscreen, where the browser allows it.
+- **H**, **?** or the question-mark icon opens the controls sheet, which also pauses; it lists
+  everything here including **V** for the renderer switch.
 
 Red enemies hunt you along the shortest path. Pink ones wander. Lime ones cut you off by heading
 for where your route is going. Two hollow kinds are harmless to touch but reshape the board: teal

@@ -203,7 +203,7 @@ export function createRenderer(canvas) {
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.beginPath();
-    ctx.arc(gx, gy, cell * (0.12 + 0.04 * pulse + 0.1 * flare), 0, Math.PI * 2);
+    ctx.arc(gx, gy, cell * (0.145 + 0.045 * pulse + 0.1 * flare), 0, Math.PI * 2);
     ctx.lineWidth = 3;
     ctx.strokeStyle = COLORS.goal;
     ctx.stroke();
@@ -212,11 +212,11 @@ export function createRenderer(canvas) {
       const a = world.time * GOAL_SPIN + k * Math.PI * 2 / GOAL_SPARKS;
       dot(gx + Math.cos(a) * orbit, gy + Math.sin(a) * orbit, cell * 0.022, COLORS.goal);
     }
-    dot(gx, gy, cell * 0.04, COLORS.goal);
+    dot(gx, gy, cell * 0.05, COLORS.goal);
 
     // Enemies: dark outline under the body so they read over hot cells, faded by distance from
     // the player. Lethal kinds are filled discs; board modifiers are hollow rings.
-    const erBase = cell * 0.085;
+    const erBase = cell * 0.1;
     const fadeNear = ENEMY_FADE_NEAR * cell;
     const fadeSpan = (ENEMY_FADE_FAR - ENEMY_FADE_NEAR) * cell;
     // A shape per kind around the heading (toX, toY) and the clock, as in GL without the glow:
@@ -311,7 +311,7 @@ export function createRenderer(canvas) {
 
     // Trail (oldest first, thin and faint to wide and brighter) and the heading chevron a fifth
     // of a cell ahead along the path. Airborne they follow the lifted player.
-    const pr = cell * 0.07;
+    const pr = cell * 0.085;
     const air = isAirborne(world);
     const liftK = air ? airProgress(world) : 0;
     const lift = 4 * liftK * (1 - liftK);

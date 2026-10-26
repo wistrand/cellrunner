@@ -98,6 +98,20 @@
     -webkit-backdrop-filter: blur(3px);
   }
   #paused { justify-content: center; padding-top: 0; }
+  /* The help sheet: a key table, centred like the pause sheet. */
+  #help { justify-content: center; padding-top: 0; }
+  .help { margin-top: 18px; border-collapse: collapse; font-size: 15px; line-height: 1.5; }
+  .help td { padding: 5px 12px; text-align: left; vertical-align: top; }
+  .help td:first-child {
+    white-space: nowrap;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+    text-align: right;
+  }
+  .help td:last-child { color: rgba(255, 255, 255, 0.7); max-width: 320px; }
+  .help tr.hidden { display: none; }
+  .help-switch { margin: 4px 0 0 10px; padding: 4px 10px; font-size: 13px; }
+  .start-link a + a { margin-left: 18px; }
   /* Icon buttons (mute, pause): lower right during play, outside #hud so they take clicks. */
   #icons {
     position: fixed;
@@ -298,11 +312,18 @@
         as you score.</figcaption>
     </figure>
   </div>
-  <div class="start-link"><a href="https://github.com/wistrand/cellrunner" target="_blank"
-    rel="noopener">source on GitHub</a></div>
+  <div class="start-link"><a id="start-help" href="#">controls</a><a
+    href="https://github.com/wistrand/cellrunner" target="_blank" rel="noopener">source on
+    GitHub</a></div>
 </div>
 
 <div id="icons-left" class="hidden">
+  <button id="help-btn" class="icon-btn" aria-label="Help" title="Controls (H)">
+    <svg viewBox="0 0 16 16" aria-hidden="true" stroke="currentColor" stroke-width="1.5"
+      stroke-linecap="round"><circle cx="8" cy="8" r="6.5" fill="none"/>
+      <path d="M6 6.4a2 2 0 1 1 3.1 1.7c-0.8 0.5-1.1 0.9-1.1 1.6" fill="none"/>
+      <circle cx="8" cy="11.7" r="0.45" fill="currentColor" stroke="none"/></svg>
+  </button>
   <button id="fs-btn" class="icon-btn" aria-label="Fullscreen" title="Fullscreen (F)">
     <svg class="enter" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"
       stroke-width="1.6" stroke-linecap="round"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
@@ -336,6 +357,23 @@
   <button id="restart-btn">RESTART</button>
   <button id="continue-btn" class="quiet">CONTINUE</button>
   <div class="keys">R restart · C or space continue · click restart</div>
+</div>
+
+<div id="help" class="overlay hidden">
+  <div class="tag">controls</div>
+  <table class="help">
+    <tr><td>click, space, enter</td><td>dash: airborne, fast, untouchable; the marker retreats</td></tr>
+    <tr><td>click again in the air</td><td>stomp the nearest enemy under you, once per dash</td></tr>
+    <tr><td>P</td><td>pause and resume</td></tr>
+    <tr><td>R</td><td>new run</td></tr>
+    <tr><td>C</td><td>continue: after a catch, or the last run from the start sheet</td></tr>
+    <tr><td>M</td><td>mute</td></tr>
+    <tr><td>F</td><td>fullscreen</td></tr>
+    <tr id="help-v"><td>V</td><td>switch renderer
+      <button id="help-switch" class="quiet help-switch">use Canvas2D</button></td></tr>
+    <tr><td>H or ?</td><td>this sheet</td></tr>
+  </table>
+  <div class="keys">H, Esc or click to close</div>
 </div>
 
 <script type="module" src="main.js"></script>

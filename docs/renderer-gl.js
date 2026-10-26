@@ -673,7 +673,7 @@ export function createRendererGL(canvas) {
     const value = Math.pow(TUNING.dashPenalty, world.legDashes);
     const gx = world.goalX;
     const gy = world.goalY;
-    const gr = cell * (0.12 + 0.04 * pulse + 0.1 * flare);
+    const gr = cell * (0.145 + 0.045 * pulse + 0.1 * flare);
     const gc = COLORS.goal;
     dot(gx, gy, gr * (2.0 + 1.6 * value), COLORS.goalGlow, -1);
     const beacon = (since / GOAL_BEACON) % 1;
@@ -688,7 +688,7 @@ export function createRendererGL(canvas) {
       dot(sx, sy, cell * 0.08, COLORS.goalGlow, -1);
       dot(sx, sy, cell * 0.022, gc);
     }
-    dot(gx, gy, cell * 0.04, gc);
+    dot(gx, gy, cell * 0.05, gc);
 
     // Enemies: glow, dark outline, body, all faded by distance from the player, and a shape per
     // kind built from dots around the heading (toX, toY) and the clock. Hunters are arrowheads
@@ -696,7 +696,7 @@ export function createRendererGL(canvas) {
     // looks where they go, splitters are two lobes breathing apart, joiners a ring tightening on
     // an inner one. The outline keeps them readable over hot cells. The phase per enemy comes
     // from its index, so neighbours do not pulse in step.
-    const erBase = cell * 0.085;
+    const erBase = cell * 0.1;
     const fadeNear = ENEMY_FADE_NEAR * cell;
     const fadeSpan = (ENEMY_FADE_FAR - ENEMY_FADE_NEAR) * cell;
     const t = world.time;
@@ -792,7 +792,7 @@ export function createRendererGL(canvas) {
       dot(f.x, f.y, cell * (0.3 + 0.6 * k), [c[0], c[1], c[2], 0.5 * fade], -1);
     }
 
-    const pr = cell * 0.07;
+    const pr = cell * 0.085;
     if (air) {
       const py = player.y - lift * cell * 0.35;
       dot(player.x, player.y + lift * cell * 0.1, pr * 0.8, COLORS.shadow);
